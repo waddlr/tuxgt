@@ -1,0 +1,5 @@
+id = "reshade-texture"
+label = "ReShade Texture"
+type = "texture"
+mode = "include"
+requires = ["reshade"]

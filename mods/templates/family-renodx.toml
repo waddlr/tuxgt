@@ -1,0 +1,10 @@
+id = "family-renodx"
+label = "RenoDX"
+type = "reshade_addon"
+
+[family]
+owner = "clshortfuse"
+repo = "renodx"
+asset_glob = "renodx-*.addon64"
+prerelease = true
+drop = []

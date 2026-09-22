@@ -1,0 +1,549 @@
+#!/bin/sh
+# Private Wayland lane for GUI verification.
+#
+# One headless sway session + one scratch prefix per lane id. The app runs as a
+# real Wayland client of that compositor: no X server, no window on the session
+# desktop, and no input path back to the operator's session. Lanes are
+# independent (own runtime dir, socket, prefix, shots), so several run at once.
+#
+# Usage: src/tuxgt/tools/gui-session <command> [options]
+#   start [--id ID] [--binary PATH] [--size WxH] [--win WxH] [--seed]
+#         [--games SPEC] [--fresh] [--bus] [--renderer pixman|gles2]
+#         [--vk off|lavapipe|auto]
+#   app   [--id ID] [--binary PATH]        relaunch the app in a live lane
+#   seed  [--id ID] [--games SPEC] [--fresh]
+#   stop  [--id ID] [--purge]
+#   list | status [--id ID] | logs [--id ID] [app|sway] [-n N]
+#   sh    [--id ID] -- CMD...              shell inside the lane environment
+#   cli   [--id ID] -- ARGS...             lane binary with the lane prefix
+#   shot  [--id ID] [--window] [NAME]      grim capture of the virtual output
+#   win   [--id ID]                        app window rect from the sway tree
+#   move  [--id ID] X Y | click X Y [1|2|3|8|9] | scroll up|down [N]
+#         (pointer input via the lane's wlinput daemon, src/tuxgt/tools/wlinput)
+#   ocr   [--id ID] [TEXT]                 tesseract TSV dump (or filtered)
+#
+# The app window is placed at 0,0, so window coordinates equal output
+# coordinates. Requires sway, swaymsg, grim, jq, magick (wtype for type/key).
+# See docs/agent/landmines.md § Ops.
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+state_root=${TUXGT_GV_ROOT:-/tmp/tuxgt-gv}
+live=${TUXGT_LIVE:-$HOME/tuxgt}
+session_bus=${DBUS_SESSION_BUS_ADDRESS:-}
+
+die() { printf 'gui-session: %s\n' "$*" >&2; exit 1; }
+usage() { sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+cmd=${1:-}
+[ -n "$cmd" ] || usage 2
+shift 2>/dev/null || true
+
+id=default
+binary=$root/src/tuxgt/target/debug/tuxgt
+size=1600x1000
+win=1280x800
+seed=0
+fresh=0
+games=
+purge=0
+bus=0
+vk=off
+renderer=gles2
+name=
+window_shot=0
+logs_which=app
+logs_n=40
+args=
+
+while [ $# -gt 0 ]; do
+    case $1 in
+        --id) id=${2:?}; shift 2 ;;
+        --id=*) id=${1#--id=}; shift ;;
+        --binary) binary=${2:?}; shift 2 ;;
+        --size) size=${2:?}; shift 2 ;;
+        --win) win=${2:?}; shift 2 ;;
+        --games) games=${2:?}; shift 2 ;;
+        --games=*) games=${1#--games=}; shift ;;
+        --renderer) renderer=${2:?}; shift 2 ;;
+        --vk) vk=${2:?}; shift 2 ;;
+        --seed) seed=1; shift ;;
+        --fresh) fresh=1; shift ;;
+        --purge) purge=1; shift ;;
+        --bus) bus=1; shift ;;
+        --window) window_shot=1; shift ;;
+        -n) logs_n=${2:?}; shift 2 ;;
+        app) [ "$cmd" = logs ] && { logs_which=$1; shift; } || { args=$*; break; } ;;
+        sway) [ "$cmd" = logs ] && { logs_which=$1; shift; } || { args=$*; break; } ;;
+        --) shift; args=$*; break ;;
+        -h|--help) usage 0 ;;
+        -*) die "unknown option $1" ;;
+        *) args=$*; break ;;
+    esac
+done
+
+case $id in
+    ''|*/*|*..*) die "bad lane id '$id'" ;;
+    *[!A-Za-z0-9_-]*) die "bad lane id '$id' (use A-Za-z0-9_-)" ;;
+esac
+lane=$state_root/$id
+runtime=$lane/runtime
+
+case ${cmd:-} in -h|--help|help) usage 0 ;; esac
+
+for tool in jq sway swaymsg grim; do
+    command -v "$tool" >/dev/null 2>&1 || \
+        die "$tool not installed — sudo pacman -S sway grim wtype vulkan-swrast"
+done
+
+lane_up() { [ -f "$lane/sway.pid" ] && kill -0 "$(cat "$lane/sway.pid")" 2>/dev/null; }
+swaysock() { [ -f "$lane/swaysock" ] || die "lane $id has no sway socket (start it first)"; cat "$lane/swaysock"; }
+wldisplay() { [ -f "$lane/wldisplay" ] || die "lane $id has no wayland display (start it first)"; cat "$lane/wldisplay"; }
+msg() { SWAYSOCK=$(swaysock) swaymsg "$@" >/dev/null; }
+msg_raw() { SWAYSOCK=$(swaysock) swaymsg "$@"; }
+output_name() { cat "$lane/output"; }
+seat_name() { cat "$lane/seat"; }
+app_pid() { [ -f "$lane/app.pid" ] && cat "$lane/app.pid"; }
+app_alive() { p=$(app_pid); [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
+
+# Software rendering only: the NVIDIA/AMD ICDs cannot present on a virtual
+# output. Default is no Vulkan at all (`--vk off`) → wgpu picks Mesa GL on
+# llvmpipe, which is what the lane is validated with. `--vk lavapipe` uses
+# software Vulkan when vulkan-swrast is installed.
+export_env() {
+    case $vk in
+        off) icd=$lane/absent.json ;;
+        lavapipe)
+            icd=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+            [ -f "$icd" ] || die "lavapipe ICD missing — sudo pacman -S vulkan-swrast"
+            ;;
+        auto)
+            icd=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+            [ -f "$icd" ] || icd=$lane/absent.json
+            ;;
+        *) die "--vk takes off, lavapipe or auto" ;;
+    esac
+    XDG_RUNTIME_DIR=$runtime
+    WAYLAND_DISPLAY=$(wldisplay)
+    SWAYSOCK=$(swaysock)
+    XDG_SESSION_TYPE=wayland
+    TUXGT_DATA=$lane/prefix
+    TUXGT_CONFIG=$lane/prefix/config
+    LIBGL_ALWAYS_SOFTWARE=1
+    GALLIUM_DRIVER=llvmpipe
+    __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json
+    VK_ICD_FILENAMES=$icd
+    VK_DRIVER_FILES=$icd
+    export XDG_RUNTIME_DIR WAYLAND_DISPLAY SWAYSOCK XDG_SESSION_TYPE TUXGT_DATA TUXGT_CONFIG
+    export LIBGL_ALWAYS_SOFTWARE GALLIUM_DRIVER __EGL_VENDOR_LIBRARY_FILENAMES VK_ICD_FILENAMES VK_DRIVER_FILES
+    # Lane clients must never see the operator session: no X display, and no
+    # session bus unless the check explicitly passes --bus (keyring steps).
+    unset DISPLAY
+    if [ $bus -eq 1 ] && [ -n "$session_bus" ]; then
+        DBUS_SESSION_BUS_ADDRESS=$session_bus
+        export DBUS_SESSION_BUS_ADDRESS
+    else
+        unset DBUS_SESSION_BUS_ADDRESS
+    fi
+}
+
+# Persistent virtual pointer (tools/wlinput): sway's `seat … cursor` commands
+# move the cursor but deliver nothing when the seat has no input devices
+# (caps=0 — the client never binds wl_pointer). The daemon holds a real device
+# for the lane's lifetime, so the seat has pointer capability before the app
+# starts. Built on demand into the lane dir; commands go through a FIFO.
+wl_gen=$lane/wlinput
+wl_fifo=$lane/wlinput.fifo
+wl_pidfile=$lane/wlinput.pid
+
+wl_alive() { [ -f "$wl_pidfile" ] && kill -0 "$(cat "$wl_pidfile")" 2>/dev/null; }
+
+wl_build() {
+    [ -x "$wl_gen/wlinput" ] && return 0
+    command -v gcc >/dev/null 2>&1 || die "gcc missing (builds src/tuxgt/tools/wlinput once per lane)"
+    command -v wayland-scanner >/dev/null 2>&1 || die "wayland-scanner missing"
+    [ -f /usr/include/wayland-client.h ] || die "wayland client headers missing"
+    [ -f /usr/include/xkbcommon/xkbcommon.h ] || die "libxkbcommon headers missing"
+    mkdir -p "$wl_gen"
+    wayland-scanner client-header "$root/src/tuxgt/tools/wlinput/wlr-virtual-pointer-unstable-v1.xml" \
+        "$wl_gen/wlr-virtual-pointer-unstable-v1-client-protocol.h" &&
+    wayland-scanner private-code "$root/src/tuxgt/tools/wlinput/wlr-virtual-pointer-unstable-v1.xml" \
+        "$wl_gen/vp-proto.c" &&
+    wayland-scanner client-header "$root/src/tuxgt/tools/wlinput/virtual-keyboard-unstable-v1.xml" \
+        "$wl_gen/virtual-keyboard-unstable-v1-client-protocol.h" &&
+    wayland-scanner private-code "$root/src/tuxgt/tools/wlinput/virtual-keyboard-unstable-v1.xml" \
+        "$wl_gen/vk-proto.c" &&
+    wayland-scanner client-header /usr/share/wayland/wayland.xml \
+        "$wl_gen/wayland-client-protocol.h" &&
+    wayland-scanner private-code /usr/share/wayland/wayland.xml \
+        "$wl_gen/wl-proto.c" &&
+    gcc -O2 -I"$wl_gen" -o "$wl_gen/wlinput" "$root/src/tuxgt/tools/wlinput/wlinput.c" \
+        "$wl_gen/vp-proto.c" "$wl_gen/vk-proto.c" "$wl_gen/wl-proto.c" \
+        -lwayland-client -lxkbcommon ||
+    die "wlinput build failed"
+}
+
+wl_start() {
+    wl_build
+    wl_stop 2>/dev/null || true
+    rm -f "$wl_fifo"
+    mkfifo -m 600 "$wl_fifo"
+    : >"$wl_gen/out.log"
+    : >"$wl_gen/err.log"
+    env -u DISPLAY XDG_RUNTIME_DIR=$runtime WAYLAND_DISPLAY=$(wldisplay) \
+        nohup "$wl_gen/wlinput" "$(wldisplay)" "${size%x*}" "${size#*x}" \
+        <>"$wl_fifo" >>"$wl_gen/out.log" 2>>"$wl_gen/err.log" &
+    echo $! >"$wl_pidfile"
+    i=0
+    while [ $i -lt 50 ]; do
+        grep -q '^ready$' "$wl_gen/out.log" 2>/dev/null && break
+        sleep 0.1
+        i=$((i + 1))
+    done
+    grep -q '^ready$' "$wl_gen/out.log" 2>/dev/null || {
+        tail -5 "$wl_gen/err.log" >&2
+        die "wlinput daemon did not start"
+    }
+}
+
+wl_send() {
+    wl_alive || die "lane $id has no input daemon (start the lane first)"
+    [ -p "$wl_fifo" ] || die "lane $id has no input fifo"
+    # 1<> (RDWR on stdout) never blocks on Linux, even with no reader; bare <>
+    # would bind fd 0 and print to stdout instead. The alive check above keeps
+    # a dead daemon a clean error instead of a dropped command.
+    printf '%s\n' "$1" 1<>"$wl_fifo"
+}
+
+wl_stop() {
+    p=$(cat "$wl_pidfile" 2>/dev/null) || p=
+    [ -z "$p" ] && return 0
+    if kill -0 "$p" 2>/dev/null && [ -p "$wl_fifo" ]; then
+        printf 'Q\n' 1<>"$wl_fifo" 2>/dev/null || true
+    fi
+    i=0
+    while kill -0 "$p" 2>/dev/null && [ $i -lt 20 ]; do sleep 0.1; i=$((i + 1)); done
+    if kill -0 "$p" 2>/dev/null; then
+        case $(tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null || echo) in
+            *wlinput*) kill "$p" 2>/dev/null || true ;;
+            *) printf 'gui-session: pid %s is not wlinput, not killing\n' "$p" >&2 ;;
+        esac
+    fi
+    rm -f "$wl_pidfile" "$wl_fifo"
+}
+
+lane_binary() { [ -f "$lane/binary" ] && cat "$lane/binary" || echo "$binary"; }
+
+sway_ready() { SWAYSOCK=$(cat "$lane/swaysock" 2>/dev/null) swaymsg -t get_version; }
+win_rect() {
+    msg_raw -t get_tree | jq -r '.. | objects | select(.app_id? == "tuxgt") | .rect | "\(.x) \(.y) \(.width) \(.height)"' | head -1
+}
+
+cmd_seed() {
+    [ -d "$live" ] || die "live prefix $live not found (set TUXGT_LIVE)"
+    if [ $fresh -eq 1 ]; then rm -rf "$lane/prefix"; fi
+    mkdir -p "$lane/prefix"
+    for d in config downloads; do
+        [ -d "$live/$d" ] || continue
+        rm -rf "$lane/prefix/$d"
+        cp -a "$live/$d" "$lane/prefix/$d"
+    done
+    if [ -n "$games" ]; then
+        mkdir -p "$lane/prefix/games"
+        rm -rf "$lane/prefix/games/$games"
+        cp -a "$live/games/$games" "$lane/prefix/games/"
+    fi
+    printf 'seed\t%s -> %s\n' "$live" "$lane/prefix"
+}
+
+cmd_start() {
+    if lane_up; then
+        printf 'lane %s already up (pid %s) — stop it first\n' "$id" "$(cat "$lane/sway.pid")" >&2
+        exit 1
+    fi
+    mkdir -p "$runtime" "$lane/prefix" "$lane/shots" "$lane/xdg-config" "$lane/xdg-data" "$lane/xdg-cache"
+    chmod 700 "$runtime"
+    if [ $seed -eq 1 ]; then cmd_seed; fi
+    rm -f "$runtime"/sway-ipc.*.sock "$runtime"/wayland-* "$lane/swaysock" "$lane/wldisplay" "$lane/sway.pid" "$lane/app.pid"
+
+    cat >"$lane/sway.conf" <<EOF
+# generated by tools/gui-session ($id)
+xwayland disable
+default_border none
+output * bg #000000 solid_color
+output * resolution $size
+for_window [app_id="tuxgt"] floating enable, resize set ${win%x*} ${win#*x}, move position 0 0
+EOF
+
+    nohup env -i \
+        HOME="$HOME" PATH="$PATH" \
+        XDG_RUNTIME_DIR="$runtime" \
+        XDG_CONFIG_HOME="$lane/xdg-config" \
+        XDG_DATA_HOME="$lane/xdg-data" \
+        XDG_CACHE_HOME="$lane/xdg-cache" \
+        XDG_SESSION_TYPE=wayland \
+        WLR_BACKENDS=headless \
+        WLR_LIBINPUT_NO_DEVICES=1 \
+        WLR_RENDERER="$renderer" \
+        WLR_RENDER_DRM_DEVICE=/dev/dri/renderD128 \
+        LIBGL_ALWAYS_SOFTWARE=1 \
+        GALLIUM_DRIVER=llvmpipe \
+        sway -c "$lane/sway.conf" -d >>"$lane/sway.log" 2>&1 &
+    echo $! >"$lane/sway.pid"
+
+    i=0
+    while [ $i -lt 100 ]; do
+        sock=$(ls "$runtime"/sway-ipc.*.sock 2>/dev/null | head -1) || true
+        [ -n "$sock" ] && break
+        sleep 0.1
+        i=$((i + 1))
+    done
+    [ -n "$sock" ] || { tail -20 "$lane/sway.log" >&2; die "sway did not start (see $lane/sway.log)"; }
+    echo "$sock" >"$lane/swaysock"
+
+    i=0
+    while [ $i -lt 100 ]; do sway_ready && break; sleep 0.1; i=$((i + 1)); done
+    sway_ready >/dev/null || { tail -20 "$lane/sway.log" >&2; die "sway IPC not answering"; }
+
+    wl=$(ls "$runtime"/wayland-* 2>/dev/null | grep -v '\.lock$' | head -1) || true
+    [ -n "$wl" ] || die "no wayland socket in $runtime"
+    basename "$wl" >"$lane/wldisplay"
+    msg_raw -t get_outputs | jq -r '.[0].name' >"$lane/output"
+    msg_raw -t get_seats | jq -r '.[0].name' >"$lane/seat"
+    echo "$binary" >"$lane/binary"
+    msg output "$(output_name)" resolution "$size" || true
+    wl_start
+
+    cmd_app
+    printf 'lane %s up\tdisplay=%s\toutput=%s\tprefix=%s\n' "$id" "$(wldisplay)" "$(output_name)" "$lane/prefix"
+}
+
+cmd_app() {
+    lane_up || die "lane $id is not running (start it first)"
+    bin=$(lane_binary)
+    [ -x "$bin" ] || die "binary not found: $bin"
+    if app_alive; then
+        p=$(app_pid)
+        case $(tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null || echo) in
+            *tuxgt*) kill "$p" 2>/dev/null || true ;;
+            *) die "pid $p is not the lane app, refusing to kill (stale $lane/app.pid?)" ;;
+        esac
+        i=0
+        while app_alive && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+    fi
+    mkdir -p "$lane/prefix"
+    export_env
+    nohup "$bin" gui >>"$lane/app.log" 2>&1 &
+    echo $! >"$lane/app.pid"
+
+    i=0
+    while [ $i -lt 300 ]; do
+        [ -n "$(win_rect)" ] && break
+        sleep 0.1
+        i=$((i + 1))
+    done
+    [ -n "$(win_rect)" ] || { tail -20 "$lane/app.log" >&2; die "app window never appeared (see $lane/app.log)"; }
+    msg "[app_id=tuxgt] floating enable, resize set ${win%x*} ${win#*x}, move position 0 0" || true
+    sleep 0.4
+    printf 'app\t%s\twindow x y w h = %s\n' "$bin" "$(win_rect)"
+}
+
+cmd_stop() {
+    p=$(app_pid) || p=
+    if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then
+        case $(tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null || echo) in
+            *tuxgt*) kill "$p" 2>/dev/null || true ;;
+            *) printf 'gui-session: pid %s is not the lane app, not killing\n' "$p" >&2 ;;
+        esac
+        i=0
+        while kill -0 "$p" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+    fi
+    wl_stop
+    p=$(cat "$lane/sway.pid" 2>/dev/null) || p=
+    if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then
+        case $(tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null || echo) in
+            *sway*) kill "$p" 2>/dev/null || true ;;
+            *) printf 'gui-session: pid %s is not sway, not killing\n' "$p" >&2 ;;
+        esac
+        i=0
+        while kill -0 "$p" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+    fi
+    rm -f "$lane/sway.pid" "$lane/app.pid" "$lane/swaysock" "$lane/wldisplay"
+    if [ $purge -eq 1 ]; then
+        rm -rf "$lane"
+        printf 'lane %s stopped and purged\n' "$id"
+    else
+        printf 'lane %s stopped (shots kept: %s/shots)\n' "$id" "$lane"
+    fi
+}
+
+cmd_list() {
+    [ -d "$state_root" ] || { printf 'no lanes under %s\n' "$state_root"; return 0; }
+    for d in "$state_root"/*; do
+        [ -d "$d" ] || continue
+        n=$(basename "$d")
+        up=down
+        if [ -f "$d/sway.pid" ] && kill -0 "$(cat "$d/sway.pid")" 2>/dev/null; then up=up; fi
+        shots=$(ls "$d/shots" 2>/dev/null | wc -l)
+        printf '%-12s sway=%-4s shots=%s\n' "$n" "$up" "$shots"
+    done
+}
+
+cmd_status() {
+    printf 'lane\t%s\nstate\t%s\n' "$id" "$lane"
+    if lane_up; then printf 'sway\tup (pid %s)\n' "$(cat "$lane/sway.pid")"; else printf 'sway\tdown\n'; fi
+    if app_alive; then printf 'app\tup (pid %s)\n' "$(app_pid)"; else printf 'app\tdown\n'; fi
+    if wl_alive; then printf 'input\tup (pid %s)\n' "$(cat "$wl_pidfile")"; else printf 'input\tdown\n'; fi
+    if [ -f "$lane/wldisplay" ]; then printf 'display\t%s\n' "$(wldisplay)"; fi
+    if [ -f "$lane/output" ]; then printf 'output\t%s (%s)\n' "$(output_name)" "$size"; fi
+    r=$(win_rect 2>/dev/null || true)
+    if [ -n "$r" ]; then printf 'window\t%s\n' "$r"; fi
+    f=$(last_shot 2>/dev/null || true)
+    if [ -n "$f" ]; then printf 'last shot\t%s\n' "$f"; fi
+    return 0
+}
+
+cmd_logs() {
+    f=$lane/$logs_which.log
+    [ -f "$f" ] || die "no $logs_which log in lane $id"
+    printf '== %s (last %s lines) ==\n' "$f" "$logs_n"
+    tail -n "$logs_n" "$f"
+}
+
+cmd_sh() {
+    [ -n "$args" ] || die "sh needs a command: gui-session sh -- tuxgt games list"
+    export_env
+    cd "$root"
+    exec sh -c "$args"
+}
+
+cmd_cli() {
+    [ -n "$args" ] || die "cli needs arguments: gui-session cli -- games list"
+    export_env
+    cd "$root"
+    exec "$(lane_binary)" $args
+}
+
+last_shot() { ls -t "$lane/shots"/*.png 2>/dev/null | head -1; }
+
+cmd_shot() {
+    lane_up || die "lane $id is not running"
+    mkdir -p "$lane/shots"
+    n=$(ls "$lane/shots" | wc -l)
+    out=$(printf '%s/shots/%02d-%s.png' "$lane" "$((n + 1))" "${name:-shot}")
+    wayland_display=$(wldisplay)
+    env -u DISPLAY XDG_RUNTIME_DIR=$runtime WAYLAND_DISPLAY=$wayland_display \
+        grim -o "$(output_name)" "$out" 2>/dev/null || \
+        env -u DISPLAY XDG_RUNTIME_DIR=$runtime WAYLAND_DISPLAY=$wayland_display grim "$out"
+    if [ $window_shot -eq 1 ]; then
+        r=$(win_rect)
+        [ -n "$r" ] || die "no app window to crop"
+        set -- $r
+        magick "$out" -crop "$3x$4+$1+$2" +repage "$out"
+    fi
+    printf '%s\t' "$out"
+    magick identify -format '%wx%h\n' "$out"
+}
+
+cmd_ocr() {
+    f=$(last_shot)
+    [ -n "$f" ] || die "no shot yet (run: gui-session shot)"
+    if [ -n "$args" ]; then
+        tesseract "$f" - --psm 11 tsv 2>/dev/null | awk -F'\t' -v pat="$args" '
+            NR == 1 { next }
+            $1 == 5 {
+                k = $2 "-" $3 "-" $4 "-" $5
+                if (!(k in n)) {
+                    n[k] = 1; l[k] = $7; t[k] = $8; r[k] = $7 + $9; b[k] = $8 + $10; txt[k] = $12
+                } else {
+                    if ($7 < l[k]) l[k] = $7
+                    if ($8 < t[k]) t[k] = $8
+                    if ($7 + $9 > r[k]) r[k] = $7 + $9
+                    if ($8 + $10 > b[k]) b[k] = $8 + $10
+                    txt[k] = txt[k] " " $12
+                }
+            }
+            END {
+                for (k in txt)
+                    if (tolower(txt[k]) ~ tolower(pat))
+                        printf "%d\t%d\t%d\t%d\t%s\n", (l[k] + r[k]) / 2, (t[k] + b[k]) / 2, r[k] - l[k], b[k] - t[k], txt[k]
+            }' | sort -n -k2
+    else
+        tesseract "$f" - --psm 11 tsv 2>/dev/null | awk -F'\t' 'NR == 1 || $1 == 5 { print $7, $8, $9, $10, $12 }'
+    fi
+}
+
+cmd_find() {
+    [ -n "$args" ] || die "find needs text"
+    out=$(cmd_ocr)
+    hit=$(printf '%s\n' "$out" | grep -i -- "$args" | head -1) || true
+    if [ -z "$hit" ]; then
+        printf 'not found: %s\n' "$args" >&2
+        exit 1
+    fi
+    printf '%s\n' "$hit" | cut -f1,2
+}
+
+cmd_move() {
+    set -- $args
+    [ $# -eq 2 ] || die "move needs X Y"
+    wl_send "M $1 $2"
+}
+
+cmd_click() {
+    set -- $args
+    [ $# -ge 2 ] || die "click needs X Y [1|2|3|8|9]"
+    wl_send "M $1 $2"
+    sleep 0.15
+    wl_send "D ${3:-1}"
+    sleep 0.15
+    wl_send "U ${3:-1}"
+}
+
+cmd_scroll() {
+    set -- $args
+    case ${1:-} in
+        up) wl_send "S 0 -${2:-1}" ;;
+        down) wl_send "S 0 ${2:-1}" ;;
+        *) die "scroll takes up|down" ;;
+    esac
+}
+
+cmd_type() {
+    command -v wtype >/dev/null 2>&1 || die "wtype not installed — sudo pacman -S wtype"
+    [ -n "$args" ] || die "type needs text"
+    env -u DISPLAY XDG_RUNTIME_DIR=$runtime WAYLAND_DISPLAY=$(wldisplay) wtype -- "$args"
+}
+
+cmd_key() {
+    command -v wtype >/dev/null 2>&1 || die "wtype not installed — sudo pacman -S wtype"
+    [ -n "$args" ] || die "key needs keysyms (e.g. Return, Tab, Escape)"
+    for k in $args; do env -u DISPLAY XDG_RUNTIME_DIR=$runtime WAYLAND_DISPLAY=$(wldisplay) wtype -k "$k"; done
+}
+
+case $cmd in
+    start) cmd_start ;;
+    app) cmd_app ;;
+    seed) cmd_seed ;;
+    stop) cmd_stop ;;
+    list) cmd_list ;;
+    status) cmd_status ;;
+    logs) cmd_logs ;;
+    sh) cmd_sh ;;
+    cli) cmd_cli ;;
+    shot) if [ -n "$args" ]; then name=$args; fi; cmd_shot ;;
+    win)
+        r=$(win_rect)
+        [ -n "$r" ] || die "no app window in lane $id"
+        printf '%s\n' "$r"
+        ;;
+    move) cmd_move ;;
+    click) cmd_click ;;
+    scroll) cmd_scroll ;;
+    type) cmd_type ;;
+    key) cmd_key ;;
+    find) cmd_find ;;
+    ocr) cmd_ocr ;;
+    -h|--help|help) usage 0 ;;
+    *) usage 2 ;;
+esac

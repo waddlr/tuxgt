@@ -1,0 +1,18 @@
+id = "deep-fried-chicken-64bit"
+type = "reshade_addon"
+label = "Deep Fried Chicken v3 - 64bit"
+requires = ["d3dcompiler-47", "nvidia-streamline", "nvngx-dlssnr-proxy"]
+include = [
+    "deep-fried-chicken-nvngx.dll",
+    "deep-fried-chicken-present-support.dll",
+]
+
+[source]
+type = "provided"
+files = [
+    "deep-fried-chicken.addon64",
+    "deep-fried-chicken.cfg",
+    "deep-fried-chicken-nvngx.dll",
+    "deep-fried-chicken-present-support.dll",
+]
+note = "Provide the DFC v3 7z or its 64-bit folder."

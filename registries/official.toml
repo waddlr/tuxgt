@@ -1,0 +1,22 @@
+version = 1
+name = "official"
+
+# TuxGT's own plugin registry. Add it in Settings → Core Plugins with
+# manifest path `registries/official.toml`, or:
+#
+#   tuxgt plugins registry add https://github.com/waddlr/tuxgt \
+#     --manifest registries/official.toml
+#
+# One SHA pins every byte below, so the catalog and its payloads can never
+# disagree. Payloads are inert data: installing one downloads a verified
+# subtree and nothing more (see docs/dev/app/gui/plugin-registry.md).
+#
+# Plugin payloads go under registries/plugins/<name>/ with a payload.toml
+# next to them. The tree digest below covers that subtree exactly, so
+# regenerate it after any payload change:
+#
+#   tuxgt plugins registry digest registries/plugins/<name>
+#
+# There are no entries yet: TuxGT ships no registry plugins. The first
+# entry lands here with its ABI major and its digest; an id, label, path,
+# and digest are the minimum a row needs.

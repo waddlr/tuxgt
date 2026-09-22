@@ -1,0 +1,15 @@
+id = "nvngx-dlssnr-proxy"
+type = "custom"
+label = "nvngx_dlssnr - workaround proxy"
+include = [
+    "nvngx_dlssnr.dll",
+    "nvngx_dlssnr.real.dll",
+]
+
+[source]
+type = "provided"
+files = [
+    "nvngx_dlssnr.dll",
+    "nvngx_dlssnr.real.dll",
+]
+note = "Proxy with renamed original. Use with ReShade DLSS-NR mods. Do not also install nvngx-dlssnr: same dest, load order decides."

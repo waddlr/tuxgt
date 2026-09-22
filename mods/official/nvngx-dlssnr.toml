@@ -1,0 +1,9 @@
+id = "nvngx-dlssnr"
+type = "custom"
+label = "nvngx_dlssnr"
+include = ["nvngx_dlssnr.dll"]
+
+[source]
+type = "provided"
+files = ["nvngx_dlssnr.dll"]
+note = "NVIDIA DLSS neural-rendering library (nvngx_dlssnr.dll). TuxGT does not download it."

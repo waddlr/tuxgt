@@ -1,0 +1,29 @@
+id = "nvidia-streamline"
+type = "custom"
+label = "NVIDIA Streamline"
+include = [
+    "sl.interposer.dll",
+    "sl.common.dll",
+    "sl.pcl.dll",
+    "sl.dlss.dll",
+    "sl.dlss_g.dll",
+    "sl.reflex.dll",
+    "nvngx_dlss.dll",
+    "nvngx_dlssd.dll",
+    "nvngx_dlssg.dll",
+]
+
+[source]
+type = "provided"
+files = [
+    "sl.interposer.dll",
+    "sl.common.dll",
+    "sl.pcl.dll",
+    "sl.dlss.dll",
+    "sl.dlss_g.dll",
+    "sl.reflex.dll",
+    "nvngx_dlss.dll",
+    "nvngx_dlssd.dll",
+    "nvngx_dlssg.dll",
+]
+note = "NVIDIA Streamline runtime. TuxGT does not download it."

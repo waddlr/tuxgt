@@ -1,0 +1,5 @@
+id = "custom-optiscaler"
+label = "Custom OptiScaler"
+type = "optiscaler"
+mode = "type"
+requires = []

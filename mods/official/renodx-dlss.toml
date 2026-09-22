@@ -1,0 +1,9 @@
+id = "renodx-dlss"
+type = "reshade_addon"
+label = "RenoDX DLSS"
+requires = ["d3dcompiler-47", "nvidia-streamline", "nvngx-dlssnr-proxy"]
+
+[source]
+type = "provided"
+files = ["renodx-dlss.addon64"]
+note = "RenoDX DLSS ReShade addon. TuxGT does not download it."
