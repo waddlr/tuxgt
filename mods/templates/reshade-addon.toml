@@ -1,0 +1,5 @@
+id = "reshade-addon"
+label = "ReShade Addon"
+type = "reshade_addon"
+mode = "include"
+requires = ["reshade"]

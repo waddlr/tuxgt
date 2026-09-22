@@ -1,0 +1,47 @@
+[graph]
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+]
+exclude-unpublished = true
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "OFL-1.1",
+    "LGPL-2.1",
+    "LGPL-2.1-or-later",
+    "LGPL-3.0",
+    "LGPL-3.0-or-later",
+    # sqlx rustls → webpki-roots
+    "CDLA-Permissive-2.0",
+    # gpui-kit 0.6 transitives
+    "0BSD",
+    "CC0-1.0",
+    "bzip2-1.0.6",
+]
+unused-allowed-license = "allow"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+
+[advisories]
+version = 2
+yanked = "warn"
+# gpui-kit 0.6 pulls unmaintained transitives (bincode, instant, paste, …)
+unmaintained = "workspace"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = ["https://github.com/kk376/kkfetch"]

@@ -1,0 +1,5 @@
+id = "custom-blank"
+label = "Custom Mod"
+type = "custom"
+mode = "custom"
+requires = []

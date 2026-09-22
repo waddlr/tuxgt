@@ -1,0 +1,29 @@
+[package]
+name = "tuxgt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "TuxGT CLI and GUI"
+
+[dependencies]
+clap.workspace = true
+fluent.workspace = true
+# APP.md §11.3: no inspector/tree-sitter; assets for the icon pack used in chrome
+gpui-kit = { version = "0.6.4", default-features = false, features = ["component", "assets"] }
+libc.workspace = true
+# E37: decode covers at the target box instead of source resolution.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+kkfetch.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+tuxgt-core = { path = "../tuxgt-core" }
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+
+[build-dependencies]
+anyhow.workspace = true
+vergen.workspace = true

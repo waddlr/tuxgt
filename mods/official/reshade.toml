@@ -1,0 +1,15 @@
+id = "reshade"
+type = "reshade"
+label = "ReShade"
+plans_allowed = ["preload", "install"]
+
+[[payload]]
+arch = "64"
+keep = ["ReShade64.dll"]
+
+[[payload]]
+arch = "32"
+keep = ["ReShade32.dll"]
+[source]
+type = "manual_url"
+url = "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe"

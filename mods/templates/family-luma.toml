@@ -1,0 +1,9 @@
+id = "family-luma"
+label = "Luma"
+type = "reshade_addon"
+
+[family]
+owner = "Filoppi"
+repo = "Luma-Framework"
+asset_glob = "Luma-*.zip"
+drop = ["dxgi.dll"]

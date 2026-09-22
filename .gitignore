@@ -1,0 +1,16 @@
+.worktrees/
+build/
+dist/
+
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+rust_out
+
+__pycache__/
+/docs/dev/
+/docs/agent/
+/.agents/
+/AGENTS.md
+/mods/contrib/

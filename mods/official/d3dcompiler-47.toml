@@ -1,0 +1,10 @@
+id = "d3dcompiler-47"
+type = "custom"
+label = "d3dcompiler_47"
+plans_allowed = ["preload"]
+sha256 = "a9523d87d06646809943b45858c1e2586f0df2e68745bc6cf4dcd698042836be"
+[env]
+WINEDLLOVERRIDES = "d3dcompiler_47=n"
+[source]
+type = "manual_url"
+url = "https://msdl.microsoft.com/download/symbols/d3dcompiler_47.dll/14C94C2D4b2000/d3dcompiler_47.dll"

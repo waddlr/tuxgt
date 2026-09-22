@@ -1,0 +1,5 @@
+id = "custom-reshade"
+label = "Custom ReShade"
+type = "reshade"
+mode = "type"
+requires = []

@@ -1,0 +1,212 @@
+#!/bin/sh
+# Append libtuxgt-launcher.so to LD_PRELOAD (never replace Steam overlay / MangoHud).
+# Packaged layout: this script is $PREFIX/bin/tuxgt-launcher,
+# the .so is $PREFIX/lib/libtuxgt-launcher.so.
+# Session: games/<rel>/tux-protonfixes.conf via games/load-correlator.ini
+# (exact prefix + exe, else single-rel prefix fallback for launcher chains).
+# A session self-arms the trampoline (env + WRAPPERS + .so) at any inject=
+# value; inject=1 is hook-only (protonfixes), never a trampoline gate.
+set -eu
+
+script=$0
+case $script in
+    /*) ;;
+    */*) script=$(CDPATH= cd -- "$(dirname -- "$script")" && pwd)/$(basename -- "$script") ;;
+    *)
+        c=$(command -v "$script" 2>/dev/null) || c=
+        [ -n "$c" ] && script=$c
+        ;;
+esac
+r=$(readlink -f -- "$script" 2>/dev/null) || r=
+[ -n "$r" ] && script=$r
+here=$(CDPATH= cd -- "$(dirname -- "$script")" && pwd)
+
+so=${TUXGT_LAUNCHER_SO:-}
+if [ -z "$so" ]; then
+    if [ -f "$here/../lib/libtuxgt-launcher.so" ]; then
+        so=$here/../lib/libtuxgt-launcher.so
+    elif [ -f "$here/libtuxgt-launcher.so" ]; then
+        so=$here/libtuxgt-launcher.so
+    elif [ -f "$here/../../build/libtuxgt-launcher.so" ]; then
+        so=$(CDPATH= cd -- "$here/../../build" && pwd)/libtuxgt-launcher.so
+    fi
+fi
+# 32-bit companion for no-session direct runs (e.g. tuxgt-launcher -- game without a tux-protonfixes.conf).
+# When a session exists, TUXGT_LAUNCHER_SO is already set to the per-game arch (libtuxgt-launcher.so vs
+# libtuxgt-launcher32.so) and this block is skipped. For direct runs with both .so present we preload the
+# 32-bit companion as well; ld.so will emit one ELF-class stderr line for the mismatched arch and load the
+# correct one. This keeps the dual-preload code path untouched per review.
+if [ -z "${TUXGT_LAUNCHER_SO:-}" ] && [ -f "$here/../lib/libtuxgt-launcher32.so" ]; then
+    case ":${LD_PRELOAD:-}:" in
+        *":$here/../lib/libtuxgt-launcher32.so:"*) ;;
+        *) export LD_PRELOAD="${LD_PRELOAD:+$LD_PRELOAD:}$here/../lib/libtuxgt-launcher32.so" ;;
+    esac
+fi
+
+data=${TUXGT_DATA:-}
+if [ -z "$data" ] && [ -f "${HOME:-}/.config/tuxgt.conf" ]; then
+    data=$(awk -F= '/^TUXGT_DATA=/{v=$2; gsub(/["'\'']/, "", v); print v; exit}' "${HOME}/.config/tuxgt.conf")
+fi
+if [ -z "$data" ] && [ -d "$here/.." ]; then
+    data=$(CDPATH= cd -- "$here/.." && pwd)
+fi
+
+# R55: same canonical key as session::canonical_exe_key — separators fold,
+# case folds, then surrounding whitespace/trailing slashes trim.
+norm_path() {
+    printf '%s' "$1" | tr '\\' '/' | tr 'A-Z' 'a-z' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's|/*$||' -e 's/[[:space:]]*$//'
+}
+
+runtime_prefix() {
+    p=${STEAM_COMPAT_DATA_PATH:-${WINEPREFIX:-}}
+    [ -n "$p" ] || return 1
+    norm_path "$p"
+}
+
+runtime_exe() {
+    e=${EXE:-}
+    if [ -z "$e" ]; then
+        for a in "$@"; do
+            case $a in
+                *.[eE][xX][eE]) e=$a ;;
+            esac
+        done
+    fi
+    [ -n "$e" ] || return 1
+    norm_path "$e"
+}
+
+correlate_rel() {
+    corr=$data/games/load-correlator.ini
+    [ -n "$data" ] && [ -f "$corr" ] || return 1
+    p=$(runtime_prefix) || return 1
+    e=$(runtime_exe "$@") || return 1
+    awk -v exe="$e" -v pfx="$p" '
+        /^#/ || /^$/ { next }
+        /^\[/ {
+            s=$0
+            gsub(/^\[/, "", s)
+            gsub(/\]$/, "", s)
+            # R55: canonicalize the section like norm_path (separators,
+            # lowercase, trim) so mixed-case Proton prefixes still match.
+            gsub(/\\/, "/", s)
+            s=tolower(s)
+            gsub(/^ +| +$/, "", s)
+            gsub(/\/+$/, "", s)
+            next
+        }
+        s == pfx {
+            i = index($0, "=")
+            if (i < 1) next
+            k = substr($0, 1, i-1)
+            v = substr($0, i+1)
+            # R55: canonicalize the key like norm_path so a
+            # Proton-reported `SkyrimSE.exe` hits a lowercased ini key.
+            gsub(/\\/, "/", k)
+            k=tolower(k)
+            gsub(/^ +| +$/, "", k)
+            gsub(/\/+$/, "", k)
+            gsub(/^ +| +$/, "", v)
+            if (k == exe) { print v; found=1; exit }
+            if (v != "") { n++; rels[n]=v }
+        }
+        END {
+            if (found) exit
+            # Prefix fallback (hook parity): launcher-first chains report
+            # an exe with no key of its own; the inner game exe inherits
+            # this env. Only a single-rel section resolves — contested
+            # prefixes miss.
+            if (n < 1) exit
+            u=rels[1]
+            for (j=2; j<=n; j++) if (rels[j] != u) exit
+            if (u != "") print u
+        }
+    ' "$corr"
+}
+
+pv_rw_add() {
+    p=$1
+    [ -n "$p" ] || return 0
+    case ":${PRESSURE_VESSEL_FILESYSTEMS_RW:-}:" in
+        *":$p:"*) ;;
+        *) export PRESSURE_VESSEL_FILESYSTEMS_RW="${PRESSURE_VESSEL_FILESYSTEMS_RW:+$PRESSURE_VESSEL_FILESYSTEMS_RW:}$p" ;;
+    esac
+}
+
+preload_so() {
+    if [ -z "$so" ] || [ ! -f "$so" ]; then
+        echo "tuxgt-launcher: libtuxgt-launcher.so not found" >&2
+        exit 1
+    fi
+    pv_rw_add "${TUXGT_GAME_DIR:-}"
+    pv_rw_add "${TUXGT_DEPOT:-}"
+    if [ -n "${TUXGT_LAUNCHER_INI:-}" ]; then
+        pv_rw_add "$(dirname -- "$TUXGT_LAUNCHER_INI")"
+    fi
+    pv_rw_add "$(dirname -- "$so")"
+    case ":${LD_PRELOAD:-}:" in
+        *":$so:"*) ;;
+        *) export LD_PRELOAD="${LD_PRELOAD:+$LD_PRELOAD:}$so" ;;
+    esac
+}
+
+if [ "$#" -eq 0 ]; then
+    echo "usage: tuxgt-launcher %command%" >&2
+    echo "  Steam:  tuxgt-launcher %command%  (last wrapper before %command%)" >&2
+    echo "  session: \$TUXGT_DATA/games/<rel>/tux-protonfixes.conf (trampoline applies env + WRAPPERS + .so; inject=1 is hook-only)" >&2
+    exit 1
+fi
+
+wrappers=
+sess=
+if rel=$(correlate_rel "$@") && [ -n "$rel" ] && [ -f "$data/games/$rel/tux-protonfixes.conf" ]; then
+    sess=$data/games/$rel/tux-protonfixes.conf
+    wrappers=$(awk -F= '/^WRAPPERS=/{print $2; exit}' "$sess")
+fi
+
+if [ -z "$sess" ]; then
+    preload_so
+    exec "$@"
+fi
+
+while IFS= read -r line || [ -n "$line" ]; do
+    case $line in
+        ''|'#'*) continue ;;
+        inject=*|WRAPPERS=*|LD_PRELOAD=*) continue ;;
+        *=*)
+            k=${line%%=*}
+            v=${line#*=}
+            case $k in
+                ''|*[!A-Za-z0-9_]*) continue ;;
+            esac
+            eval "export $k=\"\$v\""
+            ;;
+    esac
+done < "$sess"
+
+if [ -n "${TUXGT_LAUNCHER_SO:-}" ] && [ -f "${TUXGT_LAUNCHER_SO}" ]; then
+    so=$TUXGT_LAUNCHER_SO
+fi
+preload_so
+
+prefix=
+oldifs=$IFS
+IFS=,
+for w in $wrappers; do
+    IFS=$oldifs
+    case $w in
+        '' ) ;;
+        gamescope) prefix="${prefix:+$prefix }gamescope --" ;;
+        gamemode) prefix="${prefix:+$prefix }gamemoderun" ;;
+        mangohud) prefix="${prefix:+$prefix }mangohud" ;;
+        *) prefix="${prefix:+$prefix }$w" ;;
+    esac
+    IFS=,
+done
+IFS=$oldifs
+
+# shellcheck disable=SC2086
+if [ -n "$prefix" ]; then
+    exec $prefix "$@"
+fi
+exec "$@"
