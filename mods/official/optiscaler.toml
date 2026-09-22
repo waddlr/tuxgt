@@ -1,0 +1,14 @@
+id = "optiscaler"
+type = "optiscaler"
+label = "OptiScaler"
+slot = "dxgi"
+plans_allowed = ["preload", "install"]
+
+[[payload]]
+drop = ["*.bat", "*.reg", "*.md", "*README*.txt"]
+
+[source]
+type = "github"
+owner = "optiscaler"
+repo = "OptiScaler"
+asset_glob = "OptiScaler_*.7z"

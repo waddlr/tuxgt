@@ -1,0 +1,29 @@
+[package]
+name = "tuxgt-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "TuxGT core library (index, no GUI)"
+
+[dependencies]
+fluent.workspace = true
+futures-util.workspace = true
+goblin.workspace = true
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+keyring.workspace = true
+libc.workspace = true
+keyvalues-parser.workspace = true
+libsqlite3-sys = { version = "0.30", features = ["bundled"] }
+log.workspace = true
+percent-encoding.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+steamlocate.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+unic-langid.workspace = true

@@ -1,0 +1,19 @@
+id = "optiscaler-y4my4m-v4"
+type = "optiscaler"
+label = "OptiScaler - y4my4m - v4"
+slot = "dxgi"
+plans_allowed = ["preload", "install"]
+include = [
+    "OptiScaler/",
+    "nvngx.dll_dlssnr.dll",
+]
+
+[[payload]]
+drop = ["*.bat", "*.md", "*.sh", "*.exp", "*.lib", "*.pdb", "Licenses/*"]
+
+[source]
+type = "github"
+owner = "y4my4my4m"
+repo = "OptiScaler_DLSSNR_Multipass_MFG"
+asset_glob = "OptiScaler_v10.0.0-dev-fork-y4my4my4m-v4_20260905_with_DLSS.7z"
+tag = "v10.0.0-dev-fork-y4my4my4m-v4"
