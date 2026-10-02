@@ -216,15 +216,14 @@ fn trampoline_session_32bit_so_preloads_64bit_sibling() {
     .unwrap();
     std::fs::write(
         dir.join("games/steam/1/tux-protonfixes.conf"),
-        format!("inject=1\nTUXGT_LAUNCHER_SO={}\n", so32.display()),
+        format!(
+            "inject=1\npreload=1\nTUXGT_LAUNCHER_SO={}\n",
+            so32.display()
+        ),
     )
     .unwrap();
     let probe = dir.join("probe.exe");
-    std::fs::write(
-        &probe,
-        "#!/bin/sh\necho \"PROBE_LD_PRELOAD=$LD_PRELOAD\"\n",
-    )
-    .unwrap();
+    std::fs::write(&probe, "#!/bin/sh\necho \"PROBE_LD_PRELOAD=$LD_PRELOAD\"\n").unwrap();
     std::process::Command::new("chmod")
         .arg("+x")
         .arg(&probe)

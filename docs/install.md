@@ -10,7 +10,7 @@ TuxGT ships as a self-contained tarball built with `make package`. You download 
 curl -fsSL https://raw.githubusercontent.com/waddlr/tuxgt/master/install.sh | bash
 ```
 
-That downloads the latest `tuxgt.tar.gz` (needs `curl` or `wget`), unpacks it to a temp dir, and runs the packaged `tuxgt install`, which asks where to put TuxGT (default `~/tuxgt`). At the end it offers to launch the app. To install by hand instead, follow Download + Install in three commands below.
+That prints a short welcome, asks the install directory (default `~/tuxgt`, or an existing `TUXGT_DATA` that still has `bin/tuxgt` and is not under `/tmp`), downloads the latest `tuxgt.tar.gz` with a progress bar (needs `curl` or `wget`), unpacks it onto that filesystem, and runs the packaged `tuxgt install --prefix … --yes`. Set `TUXGT_PREFIX` to skip the directory prompt. At the end it offers to launch the app. To install by hand instead, follow Download + Install in three commands below.
 
 ## Prerequisites
 

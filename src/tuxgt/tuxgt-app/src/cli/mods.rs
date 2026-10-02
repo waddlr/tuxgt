@@ -150,6 +150,7 @@ pub(crate) async fn run(
             println!("{}", out.display());
             tracing::info!(source = id.as_str(), "mod exported");
         }
+        ModsCmd::Mint { cmd } => return crate::cli::mint::run(pool, cmd).await,
         ModsCmd::Provide { id, path, password } => {
             let report = with_archive_password(password, |password| {
                 tuxgt_core::provide_files_with_password(&config_dir(), dir, &id, &path, password)

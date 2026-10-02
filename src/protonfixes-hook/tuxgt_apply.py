@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 
-SKIP = frozenset({"inject", "WRAPPERS", "LD_PRELOAD"})
+SKIP = frozenset({"inject", "WRAPPERS", "LD_PRELOAD", "preload"})
 
 
 def data_dir() -> Path:

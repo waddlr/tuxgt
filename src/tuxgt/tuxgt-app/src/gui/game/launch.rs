@@ -4,9 +4,9 @@ use gpui_kit::component::Disableable as _;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use tuxgt_core::{
-    apply_launch, convert_after_unplace, data_dir, has_apply_record, heroic_running,
-    open_db_shared, preflight_convert_picks, proton_ge_cachy, restore_launch, set_handle,
-    validate_adapter_convert, ConversionReport, FluentArgs, GameRow, StoreClient,
+    apply_launch, apply_when_hook_illegal, convert_after_unplace, data_dir, has_apply_record,
+    heroic_running, open_db_shared, preflight_convert_picks, proton_ge_cachy, restore_launch,
+    set_handle, validate_adapter_convert, ConversionReport, FluentArgs, GameRow, StoreClient,
 };
 
 use super::super::widgets;
@@ -89,6 +89,13 @@ impl LaunchMode {
         } else {
             LaunchMode::Vanilla
         }
+    }
+
+    /// Hook/Apply stay painted while that arm is live, even if needs no
+    /// longer want a radio (deferred Apply restore). Vanilla + no needs
+    /// still hides them.
+    pub(crate) fn show_hook_apply(self, show_radio: bool) -> bool {
+        show_radio || self != Self::Vanilla
     }
 }
 impl Shell {
@@ -610,6 +617,34 @@ impl Shell {
                             }
                             other => AdapterOpFail::Other(other.to_string()),
                         });
+                        if let Ok(r) = &op {
+                            if !r.unchanged {
+                                if tuxgt_core::is_install(&target) {
+                                    let host =
+                                        tuxgt_core::PluginHost::load().map_err(|e| e.to_string());
+                                    if let Ok(host) = host {
+                                        if let Err(e) =
+                                            apply_when_hook_illegal(&pool, &data, &host, &game_bg)
+                                                .await
+                                        {
+                                            tracing::warn!(
+                                                game = game_bg.as_str(),
+                                                error = %e,
+                                                "install adapter apply failed"
+                                            );
+                                        }
+                                    }
+                                } else if has_apply_record(&data, &game_bg) {
+                                    if let Err(e) = restore_launch(&data, &game_bg) {
+                                        tracing::warn!(
+                                            game = game_bg.as_str(),
+                                            error = %e,
+                                            "preload adapter restore failed"
+                                        );
+                                    }
+                                }
+                            }
+                        }
                         Ok((game_bg.clone(), op, stopped))
                     })
                 })
@@ -620,11 +655,7 @@ impl Shell {
                         // Re-read core truth first: the row follows the
                         // database, never the click.
                         this.reload_selected_row();
-                        if unhook {
-                            // The store setup came out with the conversion:
-                            // repaint the radio from core truth.
-                            this.reload_armed_state(&id);
-                        }
+                        this.reload_armed_state(&id);
                         let mut msg = match &op {
                             Ok(r) if r.unchanged => {
                                 let mut a = FluentArgs::new();
@@ -779,6 +810,8 @@ impl Shell {
             self.strings.get("gui-mode-hook-disabled")
         } else if needs.argv_wrappers {
             self.strings.get("gui-mode-hook-wrappers")
+        } else if !needs.hook_legal(ge) {
+            self.strings.get("gui-mode-hook-install")
         } else {
             self.strings.get("gui-mode-hook-desc")
         };
@@ -791,13 +824,7 @@ impl Shell {
             ))
             .child(self.adapter_choice_row(view.clone(), cx))
             .when(self.is_client_game(&game_id), |this| {
-                this.when(needs.install_only, |this| {
-                    this.child(widgets::muted(
-                        self.strings.get("gui-note-launch-install-only"),
-                        cx,
-                    ))
-                })
-                .when(needs.show_radio(), |this| {
+                this.when(current.show_hook_apply(needs.show_radio()), |this| {
                     this.child(option(
                         LaunchMode::Hook,
                         "launch-mode-hook",

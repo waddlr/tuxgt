@@ -100,7 +100,7 @@ Text configs inside a mod (`.ini`, `.cfg`, `.conf`, `.toml`, `.json`, `.xml`, `.
 ## Tips
 
 - **Shader/texture packs** should use the `effect`/`texture` templates — the loader will put `.fx` under `reshade-shaders/Shaders/` and textures under `reshade-shaders/Textures`.
-- **RenoDX/Luma HDR packs** are per-game. On the ReShade tab use **Add HDR Packs**, pick the game per row, and mint — each game gets its own user mod (for example `renodx-cp2077`).
+- **RenoDX/Luma HDR packs** are per-game. On the ReShade tab use **Add HDR Packs**, pick the game per row, and mint — each game gets its own user mod (for example `renodx-cp2077`). CLI: `tuxgt mods mint list-family` then `tuxgt mods mint family --template family-renodx --asset NAME --game ID`.
 - **Custom forks of OptiScaler or ReShade** — use the `custom-optiscaler`/`custom-reshade` templates so you do not shadow the official well-known ids. The y4my4m fork needs no template: it ships as an official mod, see [OptiScaler y4my4m fork](mods/optiscaler-y4my4m.md).
 - **Keep is per game** — unchecking a file on one game's installed card hides it only for that game (for example optional companions of a mod). Required dests cannot be unchecked.
-- **Load is per game** — the Load switch on an applicable `.dll` chooses `LoadDLL` or `IncludeFile` for that game. It does not change keep or the slot.
+- **Load is per game** — the Load switch on an applicable `.dll` chooses `LoadDLL` or `IncludeFile` for that game (`tuxgt instance files <game> <mod> loaddll|include <dest>`). It does not change keep or the slot.

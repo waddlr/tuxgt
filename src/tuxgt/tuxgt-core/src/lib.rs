@@ -33,7 +33,10 @@ pub use paths::{boot_conf, config_dir, data_dir, debug_log_enabled};
 pub use sqlx::SqlitePool;
 pub use strings::{FluentArgs, Strings, EN_US_FTL};
 
-pub use apply::{apply_launch, read_record, restore_launch, ApplyCtx, ApplyFile, ApplyRecord};
+pub use apply::{
+    apply_launch, apply_when_hook_illegal, read_record, restore_launch, ApplyCtx, ApplyFile,
+    ApplyRecord,
+};
 pub use client::StoreClient;
 pub use detect::{
     detect_one, detection_snapshot, doctor, host_gpu, host_gpus, set_override, validate_override,

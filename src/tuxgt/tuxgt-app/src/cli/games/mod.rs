@@ -1,8 +1,12 @@
+mod adapter;
+mod hide;
+
 use std::io::{self, BufRead};
 use std::path::Path;
 
-use super::launch::refuse_if_client_running;
+use super::store_write::with_store_write;
 use super::*;
+
 pub(crate) fn print_games(strings: &Strings, games: &[GameRow]) {
     if games.is_empty() {
         println!("{}", strings.get("games-list-empty"));
@@ -85,18 +89,20 @@ pub(crate) async fn run_games(
                 println!("{id}\t{}", v.unwrap_or_default());
             }
         }
-        GamesCmd::Handle { id, on, off } => {
+        GamesCmd::Handle { id, on, off, yes } => {
             if on && off {
                 return Err("--on and --off are exclusive".into());
             }
             let host = PluginHost::load()?;
             if on || off {
                 // Hook-on auto-restores the trampoline when applied: a store
-                // write, so refuse under a live client like apply/restore.
-                if on && has_apply_record(dir, &id) {
-                    refuse_if_client_running(&id)?;
-                }
-                set_handle(pool, dir, &host, &id, on).await?;
+                // write, so the same stop-write-restart confirm as Apply.
+                let writes = on && has_apply_record(dir, &id);
+                with_store_write(&id, yes, writes, || async {
+                    set_handle(pool, dir, &host, &id, on).await?;
+                    Ok(())
+                })
+                .await?;
                 tracing::info!(game = id.as_str(), handle = on, "handle set");
             }
             let state = if game_handle(pool, &id).await? {
@@ -125,6 +131,14 @@ pub(crate) async fn run_games(
                 }
             }
         },
+        GamesCmd::Hide { id, clear } => hide::run_hide(pool, id, clear).await?,
+        GamesCmd::Unhide { id } => hide::run_unhide(pool, id).await?,
+        GamesCmd::Adapter {
+            id,
+            adapter,
+            yes,
+            slot,
+        } => adapter::run_adapter(pool, dir, id, adapter, yes, slot).await?,
     }
     Ok(())
 }

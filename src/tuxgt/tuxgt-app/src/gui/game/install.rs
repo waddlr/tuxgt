@@ -223,7 +223,7 @@ impl Shell {
                                 *slot = Some(p);
                             }
                         };
-                        install_instance(
+                        let m = install_instance(
                             &pool,
                             &data,
                             &tuxgt_core::config_dir(),
@@ -232,7 +232,20 @@ impl Shell {
                             &opts,
                             Some(&sink),
                         )
-                        .await
+                        .await?;
+                        if let Ok(host) = tuxgt_core::PluginHost::load() {
+                            if let Err(e) =
+                                tuxgt_core::apply_when_hook_illegal(&pool, &data, &host, &game)
+                                    .await
+                            {
+                                tracing::warn!(
+                                    game = game.as_str(),
+                                    error = %e,
+                                    "install adapter apply failed"
+                                );
+                            }
+                        }
+                        Ok(m)
                     })
                 })
                 .await;
@@ -307,6 +320,7 @@ impl Shell {
                         // the follow-up re-checks instead of serving stale.
                         this.invalidate_update(&m.game, &m.instance);
                         this.refresh_mods(&m.game, cx);
+                        this.reload_armed_state(&m.game);
                         if continue_queue {
                             this.continue_install_queue(cx);
                         }

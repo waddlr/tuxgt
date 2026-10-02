@@ -208,6 +208,28 @@ pub async fn apply_launch(
     Ok(report)
 }
 
+/// Write the trampoline when an enabled install instance exists, or when
+/// Hook is illegal (argv wrappers), and nothing is armed yet.
+pub async fn apply_when_hook_illegal(
+    pool: &SqlitePool,
+    data_dir: &Path,
+    host: &PluginHost,
+    game_id: &str,
+) -> Result<Option<String>> {
+    let needs = crate::game_launch_needs(pool, data_dir, game_id).await?;
+    if !needs.apply_legal() || (needs.hook_legal(true) && !needs.install) {
+        return Ok(None);
+    }
+    if crate::apply::read_record(data_dir, game_id)?.is_some() {
+        return Ok(None);
+    }
+    // A live Steam/Heroic flush would discard the write and leave apply.toml.
+    if crate::StoreClient::for_game(game_id).is_some_and(|c| c.running()) {
+        return Ok(None);
+    }
+    Ok(Some(apply_launch(pool, data_dir, host, game_id).await?))
+}
+
 /// Surgically restore the pre-Apply store fragments. CLI and the GUI
 /// header Apply/Restore share this.
 pub fn restore_launch(data_dir: &Path, game_id: &str) -> Result<String> {

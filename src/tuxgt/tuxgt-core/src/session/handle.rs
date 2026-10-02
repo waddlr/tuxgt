@@ -102,8 +102,10 @@ pub(crate) async fn write_handle(pool: &SqlitePool, game_id: &str, on: bool) -> 
 /// one write every management mutation runs through, so the radio repaints
 /// Not hooked instead of waiting for a click. Never routes through
 /// `set_handle` (that calls back into `sync_session`). Best-effort by design:
-/// a refused restore leaves both arms alone rather than half-disarming, and a
-/// failure here must not block the session render the caller asked for.
+/// a refused Apply restore leaves both arms alone rather than half-disarming,
+/// hook-only handle clear is PREFIX-local and is not deferred by a running
+/// store client, and a failure here must not block the session render the
+/// caller asked for.
 pub(crate) async fn disarm_if_unneeded(pool: &SqlitePool, data_dir: &Path, game_id: &str) {
     let needs = match crate::launch::game_launch_needs(pool, data_dir, game_id).await {
         Ok(needs) => needs,
@@ -132,21 +134,24 @@ pub(crate) async fn disarm_if_unneeded(pool: &SqlitePool, data_dir: &Path, game_
     if !(applied || handled) {
         return;
     }
-    // Automatic restores defer fail-closed while the owning store client
-    // runs (launch.running-client-guard): the client holds its config in
-    // memory and would discard our write. Skip the restore AND the handle
-    // clear together — never half-disarm — and return normally so the
-    // caller's PREFIX-local session rewrite still lands. The arm retries on
-    // the next explicit user op or post-exit rescan. Never a modal, never a
-    // stop: there is no confirm context on this background path.
-    if let Some(client) = crate::client::StoreClient::for_game(game_id) {
-        if client.running() {
-            tracing::warn!(
-                game = game_id,
-                client = client.name(),
-                "store client running; deferring auto-restore"
-            );
-            return;
+    // Automatic Apply restore defers fail-closed while the owning store
+    // client runs (launch.running-client-guard): the client holds its
+    // config in memory and would discard our write. Skip the restore AND
+    // the handle clear together — never half-disarm. Hook-only (`handled
+    // && !applied`) proceeds: the handle bit is PREFIX-local and does not
+    // write store files. The Apply arm retries on the next explicit user
+    // op or post-exit rescan. Never a modal, never a stop: there is no
+    // confirm context on this background path.
+    if applied {
+        if let Some(client) = crate::client::StoreClient::for_game(game_id) {
+            if client.running() {
+                tracing::warn!(
+                    game = game_id,
+                    client = client.name(),
+                    "store client running; deferring auto-restore"
+                );
+                return;
+            }
         }
     }
     // Trampoline first: if the store write is refused, `inject=1` still stands

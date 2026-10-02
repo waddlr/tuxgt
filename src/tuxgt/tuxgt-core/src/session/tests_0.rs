@@ -21,6 +21,7 @@ async fn handle_off_session_carries_trampoline_env() {
     assert!(text.contains("TUXGT_GAME_DIR="), "{text}");
     assert!(text.contains("MANGOHUD=1"), "{text}");
     assert!(text.contains("WRAPPERS=gamescope"), "{text}");
+    assert!(!text.contains("preload="), "{text}");
     let _ = tokio::fs::remove_dir_all(&dir).await;
 }
 
@@ -40,6 +41,7 @@ async fn handle_on_writes_knobs_and_wrappers() {
     assert!(text.contains("WRAPPERS=gamescope"), "{text}");
     assert!(text.contains("TUXGT_LAUNCHER_SO="), "{text}");
     assert!(!text.contains("LD_PRELOAD="), "{text}");
+    assert!(!text.contains("preload="), "{text}");
     assert!(text.contains("TUXGT_LAUNCHER_INI="), "{text}");
     let _ = tokio::fs::remove_dir_all(&dir).await;
 }
@@ -219,9 +221,9 @@ async fn apply_unsupported_leaves_handle_untouched() {
 
 #[tokio::test]
 async fn trampoline_self_arms_at_inject_zero() {
-    // E80: a correlated session self-arms the trampoline (session env +
-    // `.so` preload, append-only over the existing `LD_PRELOAD`) even at
-    // `inject=0`; a correlator miss keeps the owned/harness preload path.
+    // E80: a correlated session self-arms the trampoline (session env)
+    // even at `inject=0`. Without `preload=1` the hit skips `.so` load;
+    // a correlator miss still preloads.
     use crate::set_override;
     let (pool, dir, host, id) = setup().await;
     std::fs::create_dir_all(dir.join("lib")).unwrap();
@@ -265,7 +267,7 @@ async fn trampoline_self_arms_at_inject_zero() {
     let out = String::from_utf8(hit.stdout).unwrap();
     assert!(out.contains("PROBE_FOO=bar"), "{out}");
     assert!(out.contains("/sentinel/keep.so"), "{out}");
-    assert!(out.contains("libtuxgt-launcher.so"), "{out}");
+    assert!(!out.contains("libtuxgt-launcher.so"), "{out}");
     let miss = run("/pfx/unknown");
     assert!(miss.status.success());
     let out = String::from_utf8(miss.stdout).unwrap();

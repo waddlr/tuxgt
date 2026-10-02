@@ -10,7 +10,8 @@ use tracing_subscriber::EnvFilter;
 use tuxgt_core::{data_dir, debug_log_enabled, Strings};
 
 pub(crate) use args::{
-    CacheCmd, CustomCmd, EnvCmd, FileKeep, GlobalEnvCmd, InstanceCmd, ModsCmd, WrapperCmd,
+    CacheCmd, CustomCmd, EnvCmd, ExtraExeCmd, FileAction, FileKeep, GamesCmd, GlobalEnvCmd,
+    InstanceCmd, MintCmd, ModsCmd, WrapperCmd,
 };
 
 #[derive(Parser)]
@@ -87,7 +88,7 @@ pub(crate) enum Cmd {
         #[command(subcommand)]
         cmd: WrapperCmd,
     },
-    /// Play a game (does not write store config)
+    /// Play a game (does not write store config unless Enable & Play / --apply)
     Launch {
         id: String,
         /// Print the constructed command and do not exec
@@ -99,6 +100,12 @@ pub(crate) enum Cmd {
         /// Restore the pre-Apply store config and do not play
         #[arg(long)]
         restore: bool,
+        /// Confirm Enable & Play and store-client stop/restart
+        #[arg(long)]
+        yes: bool,
+        /// Play unmodded when Enable & Play is available
+        #[arg(long)]
+        vanilla: bool,
     },
     /// Mod catalog commands
     Mods {
@@ -134,66 +141,6 @@ pub(crate) enum Cmd {
         #[arg(long, short = 'y')]
         yes: bool,
     },
-}
-
-#[derive(Subcommand)]
-pub(crate) enum GamesCmd {
-    /// List indexed games
-    List {
-        #[arg(long)]
-        manager: Option<String>,
-        #[arg(long)]
-        store: Option<String>,
-        #[arg(long)]
-        query: Option<String>,
-        /// Show only hidden games
-        #[arg(long)]
-        hidden: bool,
-        /// Include hidden games (list hides them by default)
-        #[arg(long)]
-        all: bool,
-    },
-    /// Add a manual game by executable path
-    Add { exe: PathBuf },
-    /// Remove a manual game by id (manual rows only)
-    Remove { id: String },
-    /// Search the Steam Store for a game name (prints `appid<TAB>name` lines)
-    AppidSearch { name: String },
-    /// Print or set a game's Steam AppID overlay
-    Appid {
-        id: String,
-        /// Steam AppID to store (1-10 digits)
-        appid: Option<String>,
-        /// Clear the overlay
-        #[arg(long)]
-        clear: bool,
-    },
-    /// Per-game handle (protonfixes/trampoline inject). Default off.
-    Handle {
-        id: String,
-        /// Turn handle on
-        #[arg(long)]
-        on: bool,
-        /// Turn handle off
-        #[arg(long)]
-        off: bool,
-    },
-    /// Extra correlator exes for one game (same prefix, another exe → same session)
-    ExtraExe {
-        id: String,
-        #[command(subcommand)]
-        cmd: ExtraExeCmd,
-    },
-}
-
-#[derive(Subcommand)]
-pub(crate) enum ExtraExeCmd {
-    /// Add one extra exe key, then refresh the session + correlator
-    Add { exe: String },
-    /// Remove one extra exe key, then refresh the session + correlator
-    Remove { exe: String },
-    /// List stored extra exe keys for the game
-    List,
 }
 
 #[derive(Subcommand)]

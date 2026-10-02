@@ -50,12 +50,13 @@ LaunchSpec:
 
 ### Handle + session
 
-Hook channel per game (`game_handle.inject`, default off; Launch Mode radio arm). Not a mod. CLI `tuxgt games handle <id> [--on|--off]`; `--on` while Applied restores the trampoline first (mutual exclusion, `apply.md`). An arm nothing needs never persists (`launch.md` auto-restore): `--on` on a game with no preload/env/argv-wrapper need is cleared by the same `sync_session`, and the command reports the resulting state (`off`).
+Hook channel per game (`game_handle.inject`, default off; Launch Mode radio arm). Not a mod. CLI `tuxgt games handle <id> [--on|--off]`; `--on` while Applied restores the trampoline first (mutual exclusion, `apply.md`). An arm nothing needs never persists (`launch.md` auto-restore): `--on` on a game with no preload/env/argv-wrapper/install need is cleared by the same `sync_session`, and the command reports the resulting state (`off`). Automatic Apply restore defers while the owning store client runs; hook-only needs-gone disarm does not (handle is PREFIX-local).
 
 `games/<rel>/tux-protonfixes.conf` rewritten by `sync_session` on handle, knob, custom env, wrapper, and prewire (`rel` is `game_rel`: `{manager}_{store}/{id}` or `{manager}/{id}`). `games/load-correlator.ini` is rewritten then and after exe/prefix override, doctor, scan, and GUI library load:
 
 ```
 inject=1
+preload=1
 TUXGT_LAUNCHER_INI=...
 TUXGT_GAME_DIR=...
 TUXGT_DEPOT=...
@@ -64,7 +65,7 @@ DXVK_HUD=1
 WRAPPERS=gamescope,gamemode
 ```
 
-Unset and **disabled** knobs omitted (inherit). Enabled globals merge in before per-game knobs; unset/disabled omitted so the game inherits global or process unmanaged. `WRAPPERS=` is trampoline-only (protonfixes ignores it). Applied sessions carry `inject=0` so the hook no-ops; the trampoline self-arms from argv. The file never carries `LD_PRELOAD=` — the hook (`tuxgt_apply.py`) and the trampoline (`src/launcher/tuxgt-launcher`) append it from `TUXGT_LAUNCHER_SO` at launch time. `TUXGT_LAUNCHER_SO` stays the per-game primary (`libtuxgt-launcher32.so` when that file exists for a 32-bit game, else the 64-bit SO). The same apply path also appends the sibling ELF class next to it when that file exists (`libtuxgt-launcher.so` ↔ `libtuxgt-launcher32.so`); ld.so loads the matching class. WoW64 Proton (64-bit Unix wine running a 32-bit PE) needs both. `PRESSURE_VESSEL_FILESYSTEMS_RW` still grants the primary SO's parent (the sibling shares it).
+Unset and **disabled** knobs omitted (inherit). Enabled globals merge in before per-game knobs; unset/disabled omitted so the game inherits global or process unmanaged. `WRAPPERS=` is trampoline-only (protonfixes ignores it). `preload=1` is written only when an enabled instance uses the preload adapter; the trampoline skips `LD_PRELOAD` of the loader without it (protonfixes ignores `preload`). Applied sessions carry `inject=0` so the hook no-ops; the trampoline self-arms from argv. The file never carries `LD_PRELOAD=` — the hook (`tuxgt_apply.py`) and the trampoline (`src/launcher/tuxgt-launcher`) append it from `TUXGT_LAUNCHER_SO` at launch time when loading the `.so`. `TUXGT_LAUNCHER_SO` stays the per-game primary (`libtuxgt-launcher32.so` when that file exists for a 32-bit game, else the 64-bit SO). The same apply path also appends the sibling ELF class next to it when that file exists (`libtuxgt-launcher.so` ↔ `libtuxgt-launcher32.so`); ld.so loads the matching class. WoW64 Proton (64-bit Unix wine running a 32-bit PE) needs both. `PRESSURE_VESSEL_FILESYSTEMS_RW` still grants the primary SO's parent (the sibling shares it).
 
 `PROTON_USE_OPTISCALER=1` is granted under the same conditions as the owned env plan (enabled manifest whose official recipe allows `proton_env`, plus platform resolving to `proton` with a CachyOS/GE flavor). Shipped OptiScaler recipes do not list `proton_env`. The hook and the Apply trampoline export it, so store rows get the grant without a `LaunchSpec`. A proxy slot (`dxgi`, `d3d9`, `d3d10`, `d3d11`, `d3d12`, `winmm`, `version`) adds `WINEDLLOVERRIDES` `<stem>=n,b` to the same file; `<self>` does not. Existing stems win.
 

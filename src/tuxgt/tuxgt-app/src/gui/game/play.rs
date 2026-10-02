@@ -126,7 +126,7 @@ impl Shell {
         .detach();
     }
 
-    /// Enable & Play: arm Apply when argv wrappers are on, else Hook when
+    /// Enable & Play: arm Apply when Hook is illegal, else Hook when
     /// GE/Cachy (no store write), else Update Launch Options. Play itself
     /// never changes mode; this is the only Play path that arms one.
     pub(crate) fn enable_and_play_ui(&mut self, cx: &mut Context<Self>) {

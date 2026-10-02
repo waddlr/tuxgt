@@ -4,8 +4,8 @@
 # the .so is $PREFIX/lib/libtuxgt-launcher.so.
 # Session: games/<rel>/tux-protonfixes.conf via games/load-correlator.ini
 # (exact prefix + exe, else single-rel prefix fallback for launcher chains).
-# A session self-arms the trampoline (env + WRAPPERS + .so) at any inject=
-# value; inject=1 is hook-only (protonfixes), never a trampoline gate.
+# A session self-arms env + WRAPPERS; preload=1 loads the .so. inject=1 is
+# hook-only (protonfixes), never a trampoline gate.
 set -eu
 
 script=$0
@@ -153,7 +153,7 @@ preload_so() {
 if [ "$#" -eq 0 ]; then
     echo "usage: tuxgt-launcher %command%" >&2
     echo "  Steam:  tuxgt-launcher %command%  (last wrapper before %command%)" >&2
-    echo "  session: \$TUXGT_DATA/games/<rel>/tux-protonfixes.conf (trampoline applies env + WRAPPERS + .so; inject=1 is hook-only)" >&2
+    echo "  session: \$TUXGT_DATA/games/<rel>/tux-protonfixes.conf (trampoline applies env + WRAPPERS; preload=1 loads .so)" >&2
     exit 1
 fi
 
@@ -236,6 +236,7 @@ session_span() {
 }
 
 wrappers=
+load_so=
 sess=
 if rel=$(correlate_rel "$@") && [ -n "$rel" ] && [ -f "$data/games/$rel/tux-protonfixes.conf" ]; then
     sess=$data/games/$rel/tux-protonfixes.conf
@@ -264,6 +265,7 @@ $_tuxgt_line"
     case "$_tuxgt_qk" in
         inject|LD_PRELOAD) continue ;;
         WRAPPERS) wrappers="$_tuxgt_qv"; continue ;;
+        preload) load_so="$_tuxgt_qv"; continue ;;
     esac
     export "$_tuxgt_qk=$_tuxgt_qv"
 done < "$sess"
@@ -272,10 +274,8 @@ if [ -n "$_tuxgt_buf" ]; then
     exit 1
 fi
 
-if [ -n "${TUXGT_LAUNCHER_SO:-}" ] && [ -f "${TUXGT_LAUNCHER_SO}" ]; then
-    so=$TUXGT_LAUNCHER_SO
-fi
-preload_so
+[ -n "${TUXGT_LAUNCHER_SO:-}" ] && [ -f "${TUXGT_LAUNCHER_SO}" ] && so=$TUXGT_LAUNCHER_SO
+[ "$load_so" = 1 ] && preload_so
 
 prefix=
 oldifs=$IFS

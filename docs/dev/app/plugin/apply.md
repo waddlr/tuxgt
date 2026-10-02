@@ -1,6 +1,6 @@
 ## Apply + harvest
 
-Optional Apply so the store Play button injects; harvest of runtime-generated files into the manifest. GUI Launch Mode radio calls the same `apply_launch` / `restore_launch`. No launcher C rewrite. Apply is one arm of Hook XOR Apply; `inject=` is hook-only and the trampoline self-arms from argv.
+Optional Apply so the store Play button injects; harvest of runtime-generated files into the manifest. GUI Launch Mode radio calls the same `apply_launch` / `restore_launch`. No launcher C rewrite. Apply is one arm of Hook XOR Apply; `inject=` is hook-only and the trampoline self-arms from argv. The trampoline loads the `.so` only when the session has `preload=1`. GUI install and Convert→Install call `apply_when_hook_illegal`, which writes the trampoline when an enabled install instance exists, or when Hook is illegal (argv wrappers), and no apply record exists. The helper still skips while the store client runs. Convert Adapter→Preload restores the trampoline. CLI `instance install` and `games adapter … install` call the same helper; a helper error prints to stderr and does not fail the already-successful install or convert. CLI `launch --apply` / `--restore`, `games handle --on` (when applied), Enable & Play, and `games adapter` confirm stopping Steam/Heroic, write, then restart (GUI ClientStop).
 
 Not in this surface:
 
@@ -39,7 +39,7 @@ Every existing `<steam-root>/userdata/*/config/localconfig.vdf` (native + Flatpa
 
 ### Mutual exclusion
 
-Selecting **Update Launch Options** → `set_handle(false)` then `apply_launch` (Apply while Handle on clears Handle, then Applies). Selecting **Hook** → `restore_launch` if applied, then `set_handle(true)` (`tuxgt games handle --on` while applied restores the trampoline first). Selecting **Not hooked** → restore if applied + handle off. CLI `tuxgt launch --apply` clears Handle the same way. Applied sessions carry `inject=0` so the hook no-ops; the trampoline self-arms from argv. GUI Enable & Play arms Apply when argv wrappers are on (`launch.needs`); otherwise Hook-if-GE-else-Apply.
+Selecting **Update Launch Options** → `set_handle(false)` then `apply_launch` (Apply while Handle on clears Handle, then Applies). Selecting **Hook** → `restore_launch` if applied, then `set_handle(true)` (`tuxgt games handle --on` while applied restores the trampoline first). Selecting **Not hooked** → restore if applied + handle off. CLI `tuxgt launch --apply` clears Handle the same way. Applied sessions carry `inject=0` so the hook no-ops; the trampoline self-arms from argv. GUI Enable & Play arms Apply when Hook is illegal (`launch.needs`: argv wrappers, or any enabled install instance); otherwise Hook-if-GE-else-Apply.
 
 ### Restore (CLI + Launch Mode radio)
 
@@ -57,9 +57,10 @@ Selecting **Update Launch Options** → `set_handle(false)` then `apply_launch` 
 ### CLI
 
 ```
-tuxgt launch --apply <id>     # clear Handle, persist wrapper into Steam/Heroic, then play
-tuxgt launch --restore <id>   # restore pre-Apply store config, do not play
+tuxgt launch --apply <id> [--yes]     # clear Handle, persist wrapper into Steam/Heroic, then play
+tuxgt launch --restore <id> [--yes]   # restore pre-Apply store config, do not play
+tuxgt launch <id> [--yes|--vanilla]   # Enable & Play prompt when available, else play
 ```
 
-`--apply` + `--restore` is an error. Play prints `harvest<TAB><path>` lines for harvested files; `scan` prints `harvest<TAB><game><TAB><path>`.
+`--apply` + `--restore` is an error. `--vanilla` cannot combine with `--apply` or `--restore`. Vanilla + needed channel on a Steam/Heroic game: `--yes` arms Hook or Apply then plays; `--vanilla` plays unmodded; a TTY without those flags asks Enable & Play, then Play vanilla. Play prints `harvest<TAB><path>` lines for harvested files; `scan` prints `harvest<TAB><game><TAB><path>`. `--yes` also confirms the store-client stop/restart.
 

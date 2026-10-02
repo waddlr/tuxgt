@@ -75,6 +75,77 @@ pub(crate) fn with_archive_password<T>(
     }
 }
 
+/// Dest / instance names after the first `:` in a NeedConfirm / NeedSlotChoice
+/// message (`need-slot: a, b`).
+pub(crate) fn msg_items(msg: &str) -> Vec<String> {
+    msg.split_once(':')
+        .map(|(_, rest)| rest)
+        .unwrap_or(msg)
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// Format the GUI install auto-Apply outcome for stdout / stderr.
+/// `None` means the helper skipped (already applied, hook-legal, client running).
+pub(crate) fn auto_apply_line(
+    game: &str,
+    result: Result<Option<String>, Error>,
+) -> Option<Result<String, String>> {
+    match result {
+        Ok(Some(report)) => Some(Ok(format!("{game}\tapply\t{report}"))),
+        Ok(None) => None,
+        Err(e) => {
+            tracing::warn!(
+                game,
+                error = %e,
+                "install adapter apply failed"
+            );
+            Some(Err(format!("apply failed for {game}: {e}")))
+        }
+    }
+}
+
+pub(crate) async fn note_auto_apply(pool: &SqlitePool, game: &str) {
+    let Ok(host) = PluginHost::load() else {
+        return;
+    };
+    match auto_apply_line(
+        game,
+        apply_when_hook_illegal(pool, &data_dir(), &host, game).await,
+    ) {
+        Some(Ok(line)) => println!("{line}"),
+        Some(Err(line)) => eprintln!("{line}"),
+        None => {}
+    }
+}
+
+/// `true` on y/yes. `--yes` (`assume_yes`) skips the TTY. Non-TTY without
+/// `--yes` errors instead of hanging.
+pub(crate) fn ask_yes(prompt: &str, assume_yes: bool) -> Result<bool, Box<dyn std::error::Error>> {
+    if assume_yes {
+        return Ok(true);
+    }
+    if !io::stdin().is_terminal() {
+        return Err(format!("{prompt} (re-run with --yes)").into());
+    }
+    eprint!("{prompt} [y/N] ");
+    io::stderr().flush()?;
+    let mut line = String::new();
+    io::stdin().lock().read_line(&mut line)?;
+    let answer = line.trim();
+    Ok(answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes"))
+}
+
+pub(crate) fn confirm_prompt(prompt: &str, yes: bool) -> CliResult {
+    if ask_yes(prompt, yes)? {
+        Ok(())
+    } else {
+        Err("aborted".into())
+    }
+}
+
 pub(crate) fn confirm_list(prompt: &str, items: &[String], yes: bool) -> CliResult {
     if items.is_empty() || yes {
         return Ok(());
@@ -124,7 +195,7 @@ pub(crate) async fn game_row(pool: &SqlitePool, game_id: &str) -> Result<GameRow
 
 #[cfg(test)]
 mod tests {
-    use super::with_archive_password;
+    use super::{ask_yes, auto_apply_line, msg_items, with_archive_password};
     use std::cell::Cell;
     use tuxgt_core::Error;
 
@@ -151,6 +222,37 @@ mod tests {
         .unwrap_err();
         assert_eq!(calls.get(), 1);
         assert_eq!(err.to_string(), "archive password required");
+    }
+
+    #[test]
+    fn msg_items_splits_after_colon() {
+        assert_eq!(
+            msg_items("need-slot: optiscaler, reshade"),
+            vec!["optiscaler", "reshade"]
+        );
+        assert_eq!(
+            msg_items("foreign game-dir dests: dxgi.dll"),
+            vec!["dxgi.dll"]
+        );
+        assert_eq!(msg_items("need-slot:"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn ask_yes_assume_skips_tty() {
+        assert!(ask_yes("unused", true).unwrap());
+    }
+
+    #[test]
+    fn auto_apply_line_skip_print_fail() {
+        assert!(auto_apply_line("g", Ok(None)).is_none());
+        assert_eq!(
+            auto_apply_line("g", Ok(Some("applied".into()))),
+            Some(Ok("g\tapply\tapplied".into()))
+        );
+        let err = auto_apply_line("g", Err(Error::UnknownGame("g".into())))
+            .unwrap()
+            .unwrap_err();
+        assert!(err.starts_with("apply failed for g:"));
     }
 
     #[test]

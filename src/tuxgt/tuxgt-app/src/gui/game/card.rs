@@ -30,22 +30,8 @@ impl Shell {
         let inst = row.instance.clone();
         // R50: the graph line below renders only for missing requires or slot
         // conflicts, so it is always the warning color when present.
-        // R48: Mode names the injection mechanism.
-        // The Mode pill describes the manifest, so it only paints for an
-        // installed row: a catalog row's adapter is a placeholder, not the
-        // game's choice.
-        let mode_name = if tuxgt_core::is_preload(&row.adapter) {
-            self.strings.get("gui-adapter-mode-preload")
-        } else if tuxgt_core::is_install(&row.adapter) {
-            self.strings.get("gui-adapter-mode-install")
-        } else {
-            row.adapter.clone()
-        };
-        let mut mode_args = FluentArgs::new();
-        mode_args.set("name", mode_name);
         let mut file_args = FluentArgs::new();
         file_args.set("count", row.files.to_string());
-        let mode_pill = self.strings.get_args("gui-mod-mode", Some(&mode_args));
         // E90: the file count is the dest Accordion title, not a header chip.
         let files_title = self.strings.get_args("gui-chip-files", Some(&file_args));
         h_flex()
@@ -102,14 +88,6 @@ impl Shell {
                                         Tooltip::new(help.clone()).build(window, cx)
                                     })
                                     .child(row.label.clone())
-                            })
-                            .when(row.installed, |this| {
-                                this.child(widgets::pill(
-                                    mode_pill,
-                                    cx.theme().foreground,
-                                    b.border,
-                                    cx,
-                                ))
                             })
                             .child(div().flex_1())
                             .child(Self::move_button(

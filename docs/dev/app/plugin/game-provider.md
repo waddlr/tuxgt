@@ -102,11 +102,13 @@ Crate: `steamlocate` (brings `keyvalues-serde`). Extra VDF parsing uses `keyvalu
 tuxgt scan
 tuxgt games list [--manager] [--store] [--query] [--hidden] [--all]
 tuxgt games add <exe>
+tuxgt games hide <id> [--clear]
+tuxgt games unhide <id>
 tuxgt games appid <id> [<appid>|--clear]
 tuxgt games appid-search <name>
 ```
 
-`--query` is FTS5 on `name`. List line: `id<TAB>name<TAB>cover_path<TAB>hidden` (`hidden` marker when the effective flag is set; empty otherwise). The list hides hidden titles unless `--all` (`--hidden` shows hidden only). `scan` upserts then prints the same list. `--force` / `--yes` on scan: Detector section.
+`--query` is FTS5 on `name`. List line: `id<TAB>name<TAB>cover_path<TAB>hidden` (`hidden` marker when the effective flag is set; empty otherwise). The list hides hidden titles unless `--all` (`--hidden` shows hidden only). `hide` stores an override (`hidden`); `unhide` forces visible; `hide --clear` drops the override so the store's detected flag wins. `scan` upserts then prints the same list. `--force` / `--yes` on scan: Detector section.
 
 `games appid` prints `id<TAB>appid` (empty when unset), stores a trimmed 1-10 ASCII-digit appid, or clears it with `--clear`. Unknown id → `unknown game`; bad value → `invalid override`. The column is INSERT-only in the scan upsert (never in the update set), so the overlay survives rescan; a pruned row loses it. Metadata resolution prefers the overlay over the Steam game segment (`metadata.md`).
 

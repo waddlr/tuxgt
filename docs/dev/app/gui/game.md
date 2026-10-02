@@ -45,9 +45,12 @@ proton, prefix, API, bitness, Copy launch.
 Hero is identity + Play + modification status. Not a second detector.
 
 Store rows: **Launch Mode** radio on General is source of truth (`launch.needs`).
-Vanilla + needed channel (preload / env / argv wrappers) → primary **Enable &
-Play** (Apply when argv wrappers are on, else Hook-if-GE-else-Apply). Already
-Hooked or Applied: Play only. **Not hooked** is always selectable — it pauses
+Vanilla + needed channel (preload / env / argv wrappers / install) → primary **Enable &
+Play** (Apply when Hook is illegal: argv wrappers, or any enabled install instance;
+else Hook-if-GE-else-Apply). Already
+Hooked or Applied: Play only. CLI `tuxgt launch <id>` asks Enable & Play when that
+button would paint (`--yes` arms and plays; `--vanilla` plays unmodded; a declined
+Enable & Play then asks Play vanilla). **Not hooked** is always selectable — it pauses
 injection; when needs return, Enable & Play reappears (re-arm is another
 click). The **Hidden** switch lives on General → About
 (“Hide from TuxGT library”); it still writes the per-game override (wins over
@@ -147,16 +150,18 @@ Store rows only. Copy:
 
 Disabled Hook reason stays one line: Proton-GE / Proton-CachyOS, or argv
 wrappers need Update Launch Options. Argv wrappers on → Apply only. Preload or
-env (no argv) → Hook (if GE/Cachy) and Apply. Install-only: one muted line plus
-the enabled Not hooked button. Nothing TuxGT: Hook and Apply hidden, Not hooked
+env (no argv) → Hook (if GE/Cachy) and Apply. Install without preload disables
+Hook and requires Update Launch Options; Not hooked stays enabled. Nothing TuxGT: Hook and Apply hidden, Not hooked
 is the default. Illegal click is a no-op.
 **Not hooked is always painted and enabled**: it pauses injection and never
 touches mods, knobs, or wrappers. Enabling gamescope / GameMode /
 MangoHud-as-argv while Hook is armed auto-switches to Update Launch Options.
-Needs dropping to none while Hook/Apply is armed auto-restores the store config
-and drops the handle; the radio repaints Not hooked. Like a manual Restore the
-store client still needs its restart for that to take (a running Heroic gets the
-same restart notice).
+Needs dropping to none while Hook/Apply is armed auto-restores: hook-only
+clears the handle even while the store client runs; Apply restore still
+defers until that client is gone. The radio still paints the armed arm until
+core has disarmed, so a deferred Apply is not an unselected Not hooked with
+Hook/Apply hidden. Like a manual Restore the store client still needs its
+restart for that to take (a running Heroic gets the same restart notice).
 
 ### Extra wrappers
 
@@ -214,8 +219,7 @@ scope. An empty section paints nothing; installed sections have **no** subheads.
 Inside a section officials are **pinned first**, then
 (`load_order`, instance).
 
-Card: object card — enable switch + name + **Mode** pill
-(`Mode: Preloader Injection` / `Mode: Proxy Install`) left; the action cluster
+Card: object card — enable switch + name left; the action cluster
 (move up / move down + trash) right. No type pill
 (the section names the type); its per-type help tooltip rides the name. No
 Provides pill. Effects / Files previews are disclosures **inside** the

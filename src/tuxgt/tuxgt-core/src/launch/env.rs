@@ -98,6 +98,27 @@ pub(crate) fn wine_dll_override(env: &mut BTreeMap<String, String>, stem: &str) 
     env.insert("WINEDLLOVERRIDES".into(), parts.join(";"));
 }
 
+/// True when this enabled manifest writes a `WINEDLLOVERRIDES` stem
+/// (install-adapter companion DLL or a proxy slot).
+pub(crate) fn manifest_has_dll_override(m: &crate::FileManifest) -> bool {
+    if !m.enabled {
+        return false;
+    }
+    if crate::is_install(&m.adapter) {
+        for f in &m.files {
+            if crate::prewire::is_dll(&f.dest) && !crate::mods::is_named_injector(&f.dest) {
+                return true;
+            }
+        }
+    }
+    let Some(idx) = crate::mods::claiming_slot_index(&m.files, &m.include) else {
+        return false;
+    };
+    let dest = m.files[idx].dest.as_str();
+    let base = dest.rsplit(['/', '\\']).next().unwrap_or(dest);
+    crate::parse_slot(base).is_ok()
+}
+
 /// Install-adapter `*.dll` dests get `stem=n,b`. Stock `<self>` names do
 /// not: Wine is not how the game loads `OptiScaler.dll` or `ReShade64.dll`.
 pub(crate) fn apply_install_dll_overrides(

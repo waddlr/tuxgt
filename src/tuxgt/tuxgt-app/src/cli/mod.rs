@@ -5,44 +5,47 @@ mod games;
 mod install;
 mod instance;
 mod launch;
+mod mint;
 mod mods;
 mod registry;
 mod scan;
+mod store_write;
 mod util;
 mod wrapper;
 
 use tuxgt_core::{
-    add_extra_exe, add_manual, all_tools, apply_launch, build_launch_spec, collapse_icon_paths,
-    config_dir, custom_env, data_dir, diagnose, disable_global_knob, disable_knob, disable_mod,
-    doctor, effective_platform, enable_global_knob, enable_knob, enable_mod, enabled_knobs,
-    expand_tilde, file_is_loaddll, find_enabled_knob, find_enabled_wrapper, fixture_packages,
-    game_exists, game_handle, game_manifests, game_show, game_wrappers, generated_globs_for,
-    global_knobs, harvest_all, harvest_game_roots, harvest_roots, has_apply_record,
-    install_check_lines, install_check_ok, install_check_summary, install_instance,
-    install_userland, is_key_source, is_required_dest, knob_is_unmanaged, knob_rows, knob_source,
-    list_extra_exes, list_games, list_mods, live_knob_value, load_conflicts, load_host_inventory,
-    mods_for_game, mutate_game, open_db, packaged_prefix, read_manifest, remove_custom,
-    remove_extra_exe, remove_manual, remove_mod, rescan_mod, resolve_value, restore_launch,
-    scan_games_opts, scope_applies, scopes_display, search_steam_by_name, secret_manager_clear,
-    secret_manager_set, set_custom, set_file_keep, set_global_knob, set_handle,
-    set_instance_enabled, set_instance_slot, set_knob, set_load_order, set_mod_env_enabled,
-    set_override, set_steam_appid, set_wrapper, stage_status, steam_appid_of, sync_handle_sessions,
-    touch_last_played, uninstall_instance, uninstall_userland, unset_global_knob, unset_knob,
-    unset_wrapper, validate_custom_key, validate_override, verify_host_install, wrapper_defs,
-    DetectOpts, EnvKnob, Error, FileManifest, GameRow, InstallOpts, LaunchPaths, PluginHost,
-    SqlitePool, StageState, StoreClient, Strings,
+    add_extra_exe, add_manual, all_tools, apply_launch, apply_when_hook_illegal, build_launch_spec,
+    collapse_icon_paths, config_dir, custom_env, data_dir, diagnose, disable_global_knob,
+    disable_knob, disable_mod, doctor, effective_platform, enable_global_knob, enable_knob,
+    enable_mod, enabled_knobs, expand_tilde, file_is_loaddll, find_enabled_knob,
+    find_enabled_wrapper, fixture_packages, game_exists, game_handle, game_manifests, game_show,
+    game_wrappers, generated_globs_for, global_knobs, harvest_all, harvest_game_roots,
+    harvest_roots, has_apply_record, install_check_lines, install_check_ok, install_check_summary,
+    install_instance, install_userland, is_key_source, is_required_dest, knob_is_unmanaged,
+    knob_rows, knob_source, list_extra_exes, list_games, list_mods, live_knob_value,
+    load_conflicts, load_host_inventory, mods_for_game, mutate_game, open_db, packaged_prefix,
+    read_manifest, remove_custom, remove_extra_exe, remove_manual, remove_mod, rescan_mod,
+    resolve_value, restore_launch, scan_games_opts, scope_applies, scopes_display,
+    search_steam_by_name, secret_manager_clear, secret_manager_set, set_custom, set_file_keep,
+    set_global_knob, set_handle, set_instance_enabled, set_instance_slot, set_knob, set_load_order,
+    set_mod_env_enabled, set_override, set_steam_appid, set_wrapper, stage_status, steam_appid_of,
+    sync_handle_sessions, touch_last_played, uninstall_instance, uninstall_userland,
+    unset_global_knob, unset_knob, unset_wrapper, validate_custom_key, validate_override,
+    verify_host_install, wrapper_defs, DetectOpts, EnvKnob, Error, FileManifest, GameRow,
+    InstallOpts, LaunchPaths, PluginHost, SqlitePool, StageState, StoreClient, Strings,
 };
 
 use crate::{
-    CacheCmd, Cmd, CustomCmd, EnvCmd, ExtraExeCmd, FileKeep, GameCmd, GamesCmd, GlobalEnvCmd,
-    InstanceCmd, KeyCmd, MetadataCmd, ModsCmd, PluginsCmd, RegistryCmd, RemoteCmd, WrapperCmd,
+    CacheCmd, Cmd, CustomCmd, EnvCmd, ExtraExeCmd, FileAction, FileKeep, GameCmd, GamesCmd,
+    GlobalEnvCmd, InstanceCmd, KeyCmd, MetadataCmd, MintCmd, ModsCmd, PluginsCmd, RegistryCmd,
+    RemoteCmd, WrapperCmd,
 };
 
 pub(crate) use games::print_games;
 pub(crate) use mods::find_mod;
 pub(crate) use util::{
-    check_manifest_instance, confirm_list, game_row, note_staging, read_archive_password,
-    with_archive_password, CliResult,
+    ask_yes, check_manifest_instance, confirm_list, confirm_prompt, game_row, msg_items,
+    note_auto_apply, note_staging, read_archive_password, with_archive_password, CliResult,
 };
 
 pub async fn run_cli(cmd: Cmd, strings: &Strings) -> CliResult {
@@ -76,7 +79,9 @@ pub async fn run_cli(cmd: Cmd, strings: &Strings) -> CliResult {
                     print,
                     apply,
                     restore,
-                } => launch::run(&pool, &dir, id, print, apply, restore).await,
+                    yes,
+                    vanilla,
+                } => launch::run(&pool, &dir, id, print, apply, restore, yes, vanilla).await,
                 Cmd::Mods { cmd } => mods::run(&pool, &dir, strings, cmd).await,
                 Cmd::Cache { cmd } => cache::run(cmd).await,
                 Cmd::Instance { cmd } => instance::run(&pool, cmd).await,

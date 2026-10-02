@@ -72,10 +72,17 @@ tuxgt instance status <game>
 tuxgt instance files <game> <mod>
 tuxgt instance files <game> <mod> enable <dest> [--yes]
 tuxgt instance files <game> <mod> disable <dest> [--yes]
+tuxgt instance files <game> <mod> loaddll <dest>
+tuxgt instance files <game> <mod> include <dest>
 tuxgt instance slot <game> <mod> <self|dxgi|d3d9|d3d10|d3d11|d3d12|winmm|version> [--yes]
+tuxgt instance check <game> [<mod>] [--yes] [--slot <self|dxgi|d3d9|d3d10|d3d11|d3d12|winmm|version>]
+tuxgt instance update <game> [<mod>] [--yes] [--slot <self|dxgi|d3d9|d3d10|d3d11|d3d12|winmm|version>]
+tuxgt instance resync <game> [<mod>] [--yes]
+tuxgt games adapter <id>
+tuxgt games adapter <id> preload|install [--yes] [--slot <self|dxgi|d3d9|d3d10|d3d11|d3d12|winmm|version>]
 ```
 
-`--yes` answers the foreign-dest confirm. `--force` re-copies user-touched staging from the depot. `--slot` names the claiming dest for a slot-configurable Install-adapter install (`<self>` or a proxy stem). Without it that install returns `NeedSlotChoice` before any download; a stem another enabled mod holds returns `SlotInUse`. Preload installs keep the stock basename. `status` prints `mod<TAB>file<TAB>in-sync|user-modified|depot-newer` per staged file and exits 0. Conversion is GUI-only.
+`--yes` answers the foreign-dest confirm and the store-client stop/restart. `--force` re-copies user-touched staging from the depot. `--slot` names the claiming dest for a slot-configurable Install-adapter install (`<self>` or a proxy stem). Without it that install returns `NeedSlotChoice` before any download; a stem another enabled mod holds returns `SlotInUse`. Preload installs keep the stock basename. `status` prints `mod<TAB>file<TAB>in-sync|user-modified|depot-newer` per staged file and exits 0. `files loaddll|include` writes `[[files]].load`. `check` repairs provenance/cache (GUI baseline), then prints `up-to-date|available|unknown`. `update` checks, then redownloads on confirmation when available. `resync` is Force re-sync (overwrites user-touched staging); `--yes` skips the shared-proxy re-pick. `games adapter` prints or converts the persisted `games.adapter` choice (same `convert_game_adapter` as the GUI). Convert→Install consents first, then unhooks, then auto-Applies; Convert→Preload restores. A running Steam/Heroic prompts to stop, write, and restart (same as the GUI ClientStop card).
 
 
 ### Persisted choice and conversion
@@ -97,7 +104,7 @@ overrides per call.
   `install`, every slot-configurable mod is in that list. To `preload`, only one whose
   claiming dest is already a proxy name, so the GUI can offer a rename back to `<self>`
   (default yes). NVIDIA Streamline, addons, shaders, and textures are never in the list;
-  each of their DLLs keeps its own basename. The CLI does not convert;
+  each of their DLLs keeps its own basename. CLI `games adapter` converts the same way (`--slot` fills every named instance); a running store client confirms stop-write-restart;
 - the GUI records each pick before the conversion snapshot, then replays with
   `slots_chosen` true. That replay does not ask again, including when a later
   `NeedConfirm` retries from the Overwrite card (`slots_chosen` stays true). Preload

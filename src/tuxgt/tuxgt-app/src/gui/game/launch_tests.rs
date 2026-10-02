@@ -8,6 +8,14 @@ use super::launch::{adapter_cache_value, adapter_precheck, AdapterRefusal, Launc
 use super::update_adapter;
 
 #[test]
+fn armed_channel_stays_painted_when_needs_drop() {
+    assert!(LaunchMode::Hook.show_hook_apply(false));
+    assert!(LaunchMode::Apply.show_hook_apply(false));
+    assert!(!LaunchMode::Vanilla.show_hook_apply(false));
+    assert!(LaunchMode::Vanilla.show_hook_apply(true));
+}
+
+#[test]
 fn install_parks_consent_while_a_channel_is_armed() {
     // Hook armed: the precheck signals the unhook consent.
     assert_eq!(

@@ -89,6 +89,13 @@ pub async fn sync_session(
         "inject".into(),
         if inject { "1".into() } else { "0".into() },
     );
+    // Trampoline loads the `.so` only when an enabled instance is preload.
+    if crate::game_manifests(data_dir, game_id)?
+        .iter()
+        .any(|m| m.enabled && crate::is_preload(&m.adapter))
+    {
+        pairs.insert("preload".into(), "1".into());
+    }
     // E80: session env is trampoline fuel, not hook-only. `inject=` gates the
     // hook alone; the trampoline self-arms from argv even at `inject=0`.
     let gdir = game_dir(data_dir, &gid);

@@ -77,6 +77,7 @@ pub struct LaunchNeeds {
     pub preload: bool,
     pub env: bool,
     pub argv_wrappers: bool,
+    pub install: bool,
     pub install_only: bool,
 }
 
@@ -86,6 +87,7 @@ impl LaunchNeeds {
             preload,
             env,
             argv_wrappers,
+            install,
             install_only: install && !preload && !env && !argv_wrappers,
         }
     }
@@ -99,13 +101,22 @@ impl LaunchNeeds {
         let preload = enabled.iter().any(|m| crate::is_preload(&m.adapter));
         let install = enabled.iter().any(|m| crate::is_install(&m.adapter));
         let mod_env = enabled.iter().any(|m| m.env.iter().any(|e| e.enabled));
+        let dll_env = enabled
+            .iter()
+            .copied()
+            .any(super::manifest_has_dll_override);
         let argv_wrappers = wrappers.iter().any(|w| is_argv_wrapper(w));
-        Self::from_state(preload, install, has_game_env || mod_env, argv_wrappers)
+        Self::from_state(
+            preload,
+            install,
+            has_game_env || mod_env || dll_env,
+            argv_wrappers,
+        )
     }
 
-    /// Preload, env, or argv wrappers — Vanilla store Play will not inject.
+    /// Preload, env, argv wrappers, or install — Vanilla store Play will not inject.
     pub fn channel_needed(&self) -> bool {
-        self.preload || self.env || self.argv_wrappers
+        self.preload || self.env || self.argv_wrappers || self.install
     }
 
     pub fn show_radio(&self) -> bool {
@@ -113,16 +124,16 @@ impl LaunchNeeds {
     }
 
     pub fn hook_legal(&self, ge_cachy: bool) -> bool {
-        ge_cachy && (self.preload || self.env) && !self.argv_wrappers
+        ge_cachy && !self.argv_wrappers && (self.preload || (self.env && !self.install))
     }
 
     pub fn apply_legal(&self) -> bool {
         self.channel_needed()
     }
 
-    /// Enable & Play prefers Hook when GE/Cachy and no argv wrappers.
+    /// Enable & Play prefers Hook only when Hook is legal.
     pub fn hook_preferred(&self, ge_cachy: bool) -> bool {
-        ge_cachy && !self.argv_wrappers
+        self.hook_legal(ge_cachy)
     }
 }
 

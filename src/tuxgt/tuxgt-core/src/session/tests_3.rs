@@ -51,17 +51,18 @@ async fn auto_restore_defers_while_owner_runs_then_resumes() {
 }
 
 #[tokio::test]
-async fn auto_restore_defers_hook_only_while_owner_runs() {
-    // Handle-only arm (no apply record) also defers: the radio stays armed.
+async fn auto_restore_clears_hook_only_while_owner_runs() {
+    // Handle-only arm (no apply record) is PREFIX-local: needs-gone
+    // clears the handle even while Steam runs.
     let (pool, dir, host, id) = setup().await;
     set_knob(&pool, &id, "mangohud", "1").await.unwrap();
     set_handle(&pool, &dir, &host, &id, true).await.unwrap();
     unset_knob(&pool, &id, "mangohud").await.unwrap();
     let _guard = StoreClient::set_running_for_test(StoreClient::Steam, true);
     sync_session(&pool, &dir, &host, &id).await.unwrap();
-    assert!(game_handle(&pool, &id).await.unwrap());
+    assert!(!game_handle(&pool, &id).await.unwrap());
     let text = fs::read_to_string(steam_conf(&dir)).unwrap();
-    assert!(text.contains("inject=1"), "{text}");
+    assert!(text.contains("inject=0"), "{text}");
     let _ = tokio::fs::remove_dir_all(&dir).await;
 }
 
@@ -90,5 +91,55 @@ async fn auto_restore_manual_row_proceeds_despite_steam_running() {
     let _guard = StoreClient::set_running_for_test(StoreClient::Steam, true);
     sync_session(&pool, &dir, &host, mid).await.unwrap();
     assert!(!game_handle(&pool, mid).await.unwrap());
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+}
+
+#[tokio::test]
+async fn session_writes_preload_flag_for_preload_instance() {
+    let (pool, dir, host, id) = setup().await;
+    crate::write_manifest(&dir, &opti_manifest(&id, "reshade", "reshade")).unwrap();
+    set_handle(&pool, &dir, &host, &id, false).await.unwrap();
+    let text = fs::read_to_string(steam_conf(&dir)).unwrap();
+    assert!(text.contains("preload=1"), "{text}");
+    assert!(text.contains("inject=0"), "{text}");
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+}
+
+#[tokio::test]
+async fn trampoline_loads_so_when_preload_flag_set() {
+    let (pool, dir, host, id) = setup().await;
+    std::fs::create_dir_all(dir.join("lib")).unwrap();
+    let so = dir.join("lib/libtuxgt-launcher.so");
+    std::fs::write(&so, b"so").unwrap();
+    let probe = dir.join("probe.exe");
+    std::fs::write(&probe, "#!/bin/sh\necho \"PROBE_LD_PRELOAD=$LD_PRELOAD\"\n").unwrap();
+    std::process::Command::new("chmod")
+        .arg("+x")
+        .arg(&probe)
+        .status()
+        .unwrap();
+    crate::write_manifest(&dir, &opti_manifest(&id, "reshade", "reshade")).unwrap();
+    crate::set_override(&pool, &id, "exe", Some(probe.to_str().unwrap()))
+        .await
+        .unwrap();
+    set_handle(&pool, &dir, &host, &id, false).await.unwrap();
+    let launcher =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../launcher/tuxgt-launcher");
+    let hit = std::process::Command::new("sh")
+        .arg(&launcher)
+        .arg(&probe)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("HOME", &dir)
+        .env("TUXGT_DATA", &dir)
+        .env("TUXGT_LAUNCHER_SO", &so)
+        .env("STEAM_COMPAT_DATA_PATH", "/pfx/sekiro")
+        .env("LD_PRELOAD", "/sentinel/keep.so")
+        .output()
+        .unwrap();
+    assert!(hit.status.success());
+    let out = String::from_utf8(hit.stdout).unwrap();
+    assert!(out.contains("/sentinel/keep.so"), "{out}");
+    assert!(out.contains("libtuxgt-launcher.so"), "{out}");
     let _ = tokio::fs::remove_dir_all(&dir).await;
 }

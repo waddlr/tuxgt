@@ -50,17 +50,19 @@ fn needs_preload_or_env_allows_hook() {
     let mod_env = LaunchNeeds::from_manifests(&[need_mf("install", true, true)], false, &[]);
     assert!(mod_env.env);
     assert!(!mod_env.install_only);
-    assert!(mod_env.hook_legal(true));
+    assert!(!mod_env.hook_legal(true));
+    assert!(mod_env.apply_legal());
+    assert!(!mod_env.hook_preferred(true));
 }
 
 #[test]
-fn needs_install_only_collapses() {
+fn needs_install_only_needs_apply() {
     let n = LaunchNeeds::from_manifests(&[need_mf("install", true, false)], false, &[]);
     assert!(n.install_only);
-    assert!(!n.show_radio());
+    assert!(n.show_radio());
     assert!(!n.hook_legal(true));
-    assert!(!n.apply_legal());
-    assert!(!n.channel_needed());
+    assert!(n.apply_legal());
+    assert!(n.channel_needed());
 }
 
 #[test]

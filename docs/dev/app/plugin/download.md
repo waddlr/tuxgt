@@ -196,7 +196,7 @@ Install writes the manifest (enabled). `instance enable <game> <mod>` / `instanc
 
 ### Per-dest load mode
 
-`[[files]].load` is per dest, **this game only**. Missing = follow the recipe (`include` → IncludeFile, any other `*.dll` → LoadDLL). `true` forces LoadDLL, `false` forces IncludeFile. Only an applicable dest can be switched: a `*.dll` that is not a `pfx:` prefix copy. The switch does not change `enabled`, required-ness, or which dest claims the slot (those still follow recipe `include`). Reinstall keeps the bit for a surviving source. The same ini-list budget gate as keep applies. `tuxgt instance files` prints the effective `loaddll|include`. The installed Mods card is the writer.
+`[[files]].load` is per dest, **this game only**. Missing = follow the recipe (`include` → IncludeFile, any other `*.dll` → LoadDLL). `true` forces LoadDLL, `false` forces IncludeFile. Only an applicable dest can be switched: a `*.dll` that is not a `pfx:` prefix copy. The switch does not change `enabled`, required-ness, or which dest claims the slot (those still follow recipe `include`). Reinstall keeps the bit for a surviving source. The same ini-list budget gate as keep applies. `tuxgt instance files` prints the effective `loaddll|include`. Writers: the installed Mods card Load switch, and `tuxgt instance files <game> <mod> loaddll|include <dest>`.
 
 Turning off the last optional dest is fine. Dest match on CLI is the exact `dest` string as stored.
 
@@ -225,6 +225,8 @@ tuxgt instance disable <game-id> <mod-id>
 tuxgt instance files <game-id> <mod-id>
 tuxgt instance files <game-id> <mod-id> enable <dest> [--yes]
 tuxgt instance files <game-id> <mod-id> disable <dest> [--yes]
+tuxgt instance files <game-id> <mod-id> loaddll <dest>
+tuxgt instance files <game-id> <mod-id> include <dest>
 tuxgt cache refresh [<instance-id>]
 tuxgt cache tools
 ```

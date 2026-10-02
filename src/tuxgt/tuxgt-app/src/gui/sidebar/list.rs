@@ -32,8 +32,8 @@ fn art_glyph(art: Option<Arc<RenderImage>>, w: f32, h: f32, g: &GameIndexRow) ->
 /// never arms a channel — so it hides where the hero pairs Play with
 /// Enable & Play (one button would be ambiguous and must never
 /// auto-enable). Exact for the selected row; other rows approximate with
-/// installed mods (env/wrapper-only needs can slip through, install-only
-/// mods hide) since per-game needs are selected-game-only state.
+/// installed mods (env/wrapper-only needs can slip through) since
+/// per-game needs are selected-game-only state.
 fn quick_play_visible(
     manager: &str,
     selected: bool,
