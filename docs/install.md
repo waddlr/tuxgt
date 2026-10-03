@@ -10,7 +10,7 @@ TuxGT ships as a self-contained tarball built with `make package`. You download 
 curl -fsSL https://raw.githubusercontent.com/waddlr/tuxgt/master/install.sh | bash
 ```
 
-That prints a short welcome, asks the install directory (default `~/tuxgt`, or an existing `TUXGT_DATA` that still has `bin/tuxgt` and is not under `/tmp`), downloads the latest `tuxgt.tar.gz` with a progress bar (needs `curl` or `wget`), unpacks it onto that filesystem, and runs the packaged `tuxgt install --prefix … --yes`. Set `TUXGT_PREFIX` to skip the directory prompt. At the end it offers to launch the app. To install by hand instead, follow Download + Install in three commands below.
+That prints a short welcome. A first install asks the directory (default `~/tuxgt`). An existing install (`TUXGT_DATA` with `bin/tuxgt`, or `~/tuxgt`) keeps that prefix and does not ask to move it. It then compares `bin/tuxgt` to the latest GitHub release (`vX.Y.Z`, optional `-beta.N`, final beats beta). Already current or newer skips the tarball; older (or unreadable) asks before downloading `tuxgt.tar.gz` with a progress bar (needs `curl` or `wget`), unpacks it onto that filesystem, then runs the packaged `tuxgt install --prefix … --yes`. Set `TUXGT_PREFIX` to skip the directory prompt. At the end it offers to launch the app. To install by hand instead, follow Download + Install in three commands below.
 
 ## Prerequisites
 
@@ -97,8 +97,15 @@ Payload DLLs for OptiScaler/ReShade and NVIDIA Streamline are **not** in the tar
 
 ## Updating
 
-1. Download the newer `tuxgt.tar.gz` from [Releases](https://github.com/waddlr/tuxgt/releases).
-2. Unpack it somewhere OUTSIDE your prefix (for example `~/Downloads`), then overlay the new program files onto the prefix:
+The app checks the [Releases](https://github.com/waddlr/tuxgt/releases) page for you: when a new version is out you get a notice with an **Update** button, and **Settings → General** grows an **Update to …** button next to **Repo**. Starting an update dismisses that notice and shows a progress card you can **Cancel**. In a terminal the same thing is one command (it asks for confirmation unless you pass `--yes`; `--check` only prints the current and latest versions):
+
+```sh
+tuxgt update
+```
+
+This refreshes `bin/`, `lib/`, `share/`, and `mods/official/` (tracked, so files a release drops are removed again) while leaving `games/`, `downloads/`, `config/`, and `mods/user/` alone, then refreshes the host files from the new build. Restart TuxGT after updating.
+
+To update by hand instead, download the newer `tuxgt.tar.gz` from [Releases](https://github.com/waddlr/tuxgt/releases), unpack it somewhere OUTSIDE your prefix (for example `~/Downloads`), then overlay the new program files onto the prefix:
 
 ```sh
 cd ~/Downloads
@@ -107,7 +114,7 @@ cp -a tuxgt/. ~/tuxgt/
 ~/tuxgt/bin/tuxgt install --yes
 ```
 
-This refreshes `bin/`, `lib/`, `share/`, and `mods/official/` while leaving `games/`, `downloads/`, `config/`, and `mods/user/` alone. Restart TuxGT after updating. (If your prefix is not `~/tuxgt`, use that path in both commands. Do not run the new tree's `install` directly: when a prefix already exists at the destination, `install` keeps the old tree and only refreshes host files, orphaning the new binaries.)
+(If your prefix is not `~/tuxgt`, use that path in both commands. Do not run the new tree's `install` directly: when a prefix already exists at the destination, `install` keeps the old tree and only refreshes host files, orphaning the new binaries.)
 
 To relocate instead of updating in place:
 

@@ -250,7 +250,7 @@ Icon rules:
   X is a session-dismiss, dropped when UpToDate/gone. A successful
   per-game Update recounts that game immediately and drops `game:<id>`
   when nothing there is still stale, without waiting for the next poll.
-  Unknown never cards. An `app:<tag>` card is part of `app.self-update` and is not in this tree.
+  Unknown never cards. An `app:<tag>` Attention card (`TuxGT {tag} is available`) carries an in-card Update button (`app.self-update`); clicking Update (card or About) drops that card immediately. Apply opens a Live card (`Updating to {tag}…`) with a progress bar and Cancel; cancel or failure restores `Available` and the Attention card, a newly available tag also cards. Live X still snoozes (never cancels) — Cancel is the in-card / About control.
   The card X is at kit `small` (24px), ghost, hover-only. The **Bell** (left of
   the titlebar rule) opens the sidecar — no pane, cards + ghost Clear all — and is
   ghost, primary `#3daee9` while Live is visible, warning `#e5c07b` while

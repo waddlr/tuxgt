@@ -22,7 +22,7 @@ pub use artwork::{
     art_fingerprint_file, bust_game_art_for_appid, render_game_art, thumb_file, touch_game_art,
     ArtKind,
 };
-pub use fetch::{fetch_url, CachedAsset, FetchProgress, ProgressSink};
+pub use fetch::{fetch_url, CachedAsset, CancelFlag, FetchProgress, ProgressSink};
 pub use github::{list_family_assets, list_family_assets_many, FamilyAsset};
 pub use harvest::{harvest_all, harvest_game, harvest_game_roots, harvest_roots};
 pub use hash::{
@@ -43,7 +43,7 @@ pub use unpack::{
 };
 
 #[cfg(test)]
-mod testing;
+pub(crate) mod testing;
 #[cfg(test)]
 mod tests_0;
 #[cfg(test)]

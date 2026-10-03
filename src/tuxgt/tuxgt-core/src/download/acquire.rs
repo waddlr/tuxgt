@@ -60,6 +60,7 @@ pub async fn acquire_with_source(
         Some(&inst.id),
         progress,
         redownload,
+        None,
     )
     .await?;
     tracing::info!(instance = inst.id.as_str(), bytes = asset.bytes, "acquired");

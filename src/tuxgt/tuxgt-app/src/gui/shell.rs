@@ -15,6 +15,7 @@ use super::tray::{AppCommand, HideState};
 use super::tray::{InstallGuard, RecentSnapshot};
 
 use super::notice_store::NoticeStore;
+use super::settings::{AppUpdate, AppUpdateLive};
 use super::*;
 
 pub struct Shell {
@@ -254,6 +255,12 @@ pub struct Shell {
     /// Installed names, AppID display names, and the last catalog-check
     /// row for the Settings Mods Details disclosure.
     pub(crate) catalog_meta: CatalogMeta,
+    /// Self-update button state (About + `app:` notice action). The E104
+    /// poll run refreshes it; `Updated` is terminal until restart.
+    pub(crate) app_update: AppUpdate,
+    /// Live card for the in-flight apply (progress + cancel flag).
+    pub(crate) app_update_live: Option<AppUpdateLive>,
+    pub(crate) app_update_live_seq: u64,
     /// R32 instances with an in-flight `check_update`.
     pub(crate) mod_update_pending: HashSet<(String, String)>,
     /// R33 last `stage_status` rows per game id.

@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
+use super::super::super::settings::AppUpdate;
 use super::super::super::*;
 use super::super::*;
 use super::controller::Ctx;
@@ -272,6 +273,9 @@ pub(super) fn build_window(ctx: &Ctx, cx: &mut App) -> Option<LiveWindow> {
                 game_attention_settled: HashMap::new(),
                 catalog_updates: std::collections::HashSet::new(),
                 catalog_meta: CatalogMeta::default(),
+                app_update: AppUpdate::Unknown,
+                app_update_live: None,
+                app_update_live_seq: 0,
                 mod_update_pending: HashSet::new(),
                 mod_stage: HashMap::new(),
                 mod_conflicts: HashMap::new(),

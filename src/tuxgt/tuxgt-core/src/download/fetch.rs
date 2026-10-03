@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -153,6 +154,14 @@ impl FetchProgress {
 /// allocation-free and lets the caller own the state it writes into.
 pub type ProgressSink<'a> = Option<&'a (dyn Fn(FetchProgress) + Send + Sync)>;
 
+/// Optional abort flag. Set by the GUI self-update Cancel; acquire/CLI pass
+/// `None`. A true flag returns `Error::Cancelled` and keeps the `.part`.
+pub type CancelFlag<'a> = Option<&'a AtomicBool>;
+
+pub(crate) fn cancelled(flag: CancelFlag<'_>) -> bool {
+    flag.is_some_and(|c| c.load(Ordering::SeqCst))
+}
+
 /// One progress report; no-op without a sink.
 pub(crate) fn report(progress: ProgressSink<'_>, bytes: u64, total: Option<u64>) {
     if let Some(f) = progress {
@@ -209,6 +218,7 @@ pub async fn fetch_url(
     instance: Option<&str>,
     progress: ProgressSink<'_>,
     force: bool,
+    cancel: CancelFlag<'_>,
 ) -> Result<CachedAsset> {
     tracing::debug!(
         url,
@@ -220,16 +230,21 @@ pub async fn fetch_url(
     let key = url_key(url);
     let lock = entry_lock(&key);
     let _guard = lock.lock().await;
+    if cancelled(cancel) {
+        return Err(Error::Cancelled);
+    }
     if force {
         let entry = cache_dir(data_dir).join(&key);
         for e in fs::read_dir(&entry).into_iter().flatten().flatten() {
             let p = e.path();
-            if p.is_file() && p.file_name().is_some_and(|n| n != "meta.toml") {
+            let name = p.file_name().unwrap_or_default();
+            // Keep `.part` so a cancelled force-refetch can Range-resume.
+            if p.is_file() && name != "meta.toml" && !name.to_string_lossy().ends_with(".part") {
                 let _ = fs::remove_file(&p);
             }
         }
     }
-    fetch_url_locked(data_dir, url, pinned, instance, progress).await
+    fetch_url_locked(data_dir, url, pinned, instance, progress, cancel).await
 }
 
 pub(crate) async fn fetch_url_locked(
@@ -238,6 +253,7 @@ pub(crate) async fn fetch_url_locked(
     pinned: Option<&str>,
     instance: Option<&str>,
     progress: ProgressSink<'_>,
+    cancel: CancelFlag<'_>,
 ) -> Result<CachedAsset> {
     let entry = cached_file(data_dir, url);
     let entry = entry
@@ -253,6 +269,9 @@ pub(crate) async fn fetch_url_locked(
         );
         return Ok(hit);
     }
+    if cancelled(cancel) {
+        return Err(Error::Cancelled);
+    }
     let filename = filename_from_url(url);
     let _ = fs::remove_file(entry.join(&filename));
     let client = client()?;
@@ -262,10 +281,20 @@ pub(crate) async fn fetch_url_locked(
     if resume_from > 0 {
         req = req.header("Range", format!("bytes={resume_from}-"));
     }
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| Error::Download(e.to_string()))?;
+    let resp = {
+        let fut = req.send();
+        tokio::pin!(fut);
+        loop {
+            tokio::select! {
+                r = &mut fut => break r.map_err(|e| Error::Download(e.to_string()))?,
+                _ = tokio::time::sleep(std::time::Duration::from_millis(50)), if cancel.is_some() => {
+                    if cancelled(cancel) {
+                        return Err(Error::Cancelled);
+                    }
+                }
+            }
+        }
+    };
     let status = resp.status();
     let mut wrote_from = resume_from;
     if resume_from > 0 && status != reqwest::StatusCode::PARTIAL_CONTENT {
@@ -292,12 +321,18 @@ pub(crate) async fn fetch_url_locked(
     use futures_util::StreamExt;
     let mut wrote = wrote_from;
     while let Some(chunk) = stream.next().await {
+        if cancelled(cancel) {
+            return Err(Error::Cancelled);
+        }
         let chunk = chunk.map_err(|e| Error::Download(e.to_string()))?;
         f.write_all(&chunk)?;
         wrote += chunk.len() as u64;
         report(progress, wrote, expect);
     }
     drop(f);
+    if cancelled(cancel) {
+        return Err(Error::Cancelled);
+    }
     let bytes = fs::metadata(&part)?.len();
     if let Some(expect) = expect {
         if bytes != expect {

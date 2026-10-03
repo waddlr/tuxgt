@@ -127,7 +127,7 @@ refuses. Output is one `removed\t<path>` / `skipped\t<path>` line per path
 
 ### Self-update (`tuxgt update`, MAP `app.self-update`)
 
-Specified, not in this tree (MAP `app.self-update` Missing).
+MAP `app.self-update` Exists.
 
 Own version (`CARGO_PKG_VERSION`) vs the latest non-prerelease
 `waddlr/tuxgt` GitHub release (`tuxgt.tar.gz` asset, same tarball
@@ -158,7 +158,13 @@ build → drop the spent download entry. No previous manifest
 `games/`, `downloads/` (at rest), `config/` (except the manifest
 itself), `mods/user/`, registries, and kept official payloads are
 never touched. A failed host refresh errors loudly (the prefix is
-already new; re-run `tuxgt install`).
+already new; re-run `tuxgt install`). GUI apply drops the `app:<tag>`
+Attention card as soon as Update is clicked (action taken), opens a
+Live card for fetch progress with Cancel (About morphs to Cancel too),
+and restores `Available` plus the Attention card on cancel or failure.
+A new available tag also cards. Cancel aborts the fetch only (keeps
+`.part`); once overlay has started, cancel is ignored. CLI has no
+cancel.
 
 ## Monorepo (real paths)
 

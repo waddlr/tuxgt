@@ -346,9 +346,17 @@ async fn fetch_url_incomplete_is_download_error_not_pin_mismatch() {
     let dir = std::env::temp_dir().join(format!("tuxgt-r69-inc-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     let url = format!("http://127.0.0.1:{port}/d3dcompiler_47.dll");
-    let err = fetch_url(&dir, &url, Some(&pin), Some("d3dcompiler-47"), None, false)
-        .await
-        .unwrap_err();
+    let err = fetch_url(
+        &dir,
+        &url,
+        Some(&pin),
+        Some("d3dcompiler-47"),
+        None,
+        false,
+        None,
+    )
+    .await
+    .unwrap_err();
     // hyper errors on a short Content-Length; a clean short stream
     // hits our incomplete check. Neither is a pin-mismatch.
     assert!(matches!(&err, Error::Download(_)), "{err:?}");
@@ -369,8 +377,8 @@ async fn fetch_url_overlapping_same_url_one_body() {
     let _ = fs::remove_dir_all(&dir);
     let url = format!("http://127.0.0.1:{port}/d3dcompiler_47.dll");
     let (a, b) = tokio::join!(
-        fetch_url(&dir, &url, None, Some("a"), None, false),
-        fetch_url(&dir, &url, None, Some("b"), None, false),
+        fetch_url(&dir, &url, None, Some("a"), None, false, None),
+        fetch_url(&dir, &url, None, Some("b"), None, false, None),
     );
     let a = a.unwrap();
     let b = b.unwrap();

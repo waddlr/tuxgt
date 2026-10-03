@@ -26,6 +26,9 @@ pub enum Error {
     UnknownInstance(String),
     #[error("download: {0}")]
     Download(String),
+    /// Caller aborted an in-flight fetch. The `.part` is kept for resume.
+    #[error("cancelled")]
+    Cancelled,
     #[error("cache: {0}")]
     Cache(String),
     #[error("manifest: {0}")]
@@ -109,6 +112,8 @@ pub enum Error {
     },
     #[error("install: {0}")]
     Install(String),
+    #[error("update: {0}")]
+    Update(String),
     #[error("missing requires type {0}")]
     MissingRequires(String),
 }

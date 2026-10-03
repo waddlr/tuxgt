@@ -118,7 +118,7 @@ pub(crate) async fn fetch_original(
     land: fn(&Path, &str, &Path),
     dest: PathBuf,
 ) -> Result<PathBuf> {
-    let asset = fetch_url(data_dir, url, None, None, None, false).await?;
+    let asset = fetch_url(data_dir, url, None, None, None, false, None).await?;
     land(data_dir, game_id, &asset.file);
     drop_download(data_dir, &asset.key);
     Ok(dest)

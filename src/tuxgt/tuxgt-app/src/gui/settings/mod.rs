@@ -21,10 +21,15 @@ mod mods_ops;
 mod plugins;
 mod registry;
 mod secret;
+mod update;
+mod update_btn;
+mod update_live;
 
 pub(crate) use add_pick::*;
 pub(crate) use add_scan::*;
 pub(crate) use export::*;
+pub(crate) use update::AppUpdate;
+pub(crate) use update_live::AppUpdateLive;
 
 use gpui_kit::assets::IconName as FullIconName;
 use gpui_kit::component::tab::{Tab, TabBar};

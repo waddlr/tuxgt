@@ -49,9 +49,17 @@ async fn fetch_url_reports_progress_then_cache_hit_reports_nothing() {
     let url = format!("http://127.0.0.1:{port}/optiscaler.7z");
     let seen = StdMutex::new(Vec::new());
     let sink = |p: FetchProgress| seen.lock().unwrap().push(p);
-    let asset = fetch_url(&dir, &url, None, Some("optiscaler"), Some(&sink), false)
-        .await
-        .unwrap();
+    let asset = fetch_url(
+        &dir,
+        &url,
+        None,
+        Some("optiscaler"),
+        Some(&sink),
+        false,
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(asset.bytes, body.len() as u64);
     let seen = seen.into_inner().unwrap();
     let first = seen.first().expect("a report before the first chunk");
@@ -72,6 +80,7 @@ async fn fetch_url_reports_progress_then_cache_hit_reports_nothing() {
         Some("optiscaler"),
         Some(&quiet_sink),
         false,
+        None,
     )
     .await
     .unwrap();

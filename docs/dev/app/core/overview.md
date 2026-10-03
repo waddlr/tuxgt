@@ -62,7 +62,7 @@ Contribution layers: (1) recipe TOML, (2) in-tree first-party, (3) external ABI 
 
 ## Never first-party
 
-Lutris, Bottles, Faugus; Nexus API (browser + “put the file here” only); FOMOD/VFS/load order; Proton version manager; Windows NVIDIA driver profiles; Flatpak or AppImage of TuxGT; launching Heroic through Flatpak; library folder watch; first-class vkBasalt; desktop autostart; GNOME-specific UI; Steam Deck Gaming Mode / big-picture; Slint; rewriting the C launcher; redistributing ReShade/OptiScaler in git; system-wide install; iced in the product binary; Qt; Tauri/WebView. Flatpak discovery of Steam and Heroic stays. (Self-update from GitHub releases is first-party and not built on this tree yet: `install.md` Self-update, MAP `app.self-update`.)
+Lutris, Bottles, Faugus; Nexus API (browser + “put the file here” only); FOMOD/VFS/load order; Proton version manager; Windows NVIDIA driver profiles; Flatpak or AppImage of TuxGT; launching Heroic through Flatpak; library folder watch; first-class vkBasalt; desktop autostart; GNOME-specific UI; Steam Deck Gaming Mode / big-picture; Slint; rewriting the C launcher; redistributing ReShade/OptiScaler in git; system-wide install; iced in the product binary; Qt; Tauri/WebView. Flatpak discovery of Steam and Heroic stays. Self-update from GitHub releases is first-party (`install.md` Self-update, MAP `app.self-update`).
 
 ## Stack (locked)
 

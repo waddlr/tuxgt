@@ -1,6 +1,8 @@
 use gpui_kit::*;
 
-use tuxgt_core::{config_dir, data_dir, find_mod, open_db_shared, FluentArgs};
+use tuxgt_core::{
+    check_app_update, config_dir, data_dir, find_mod, open_db_shared, AppUpdateStatus, FluentArgs,
+};
 
 use super::notice::NoticeKind;
 use super::*;
@@ -8,12 +10,15 @@ use super::*;
 /// E104: one catalog poll outcome. `available` = Mod ids whose catalog
 /// check says Available; `installed_zero` = the subset with no installs
 /// (Settings-side cards); `per_game` = (game, stale-count) pairs for
-/// per-game cards. Unknown never appears here.
+/// per-game cards. Unknown never appears here. `app` rides the same run
+/// (no new timer): the self-update verdict, or `None` when the check
+/// itself failed to run.
 #[derive(Default)]
 pub(crate) struct PollReport {
     pub(crate) available: std::collections::HashSet<String>,
     pub(crate) installed_zero: std::collections::HashSet<String>,
     pub(crate) per_game: Vec<(String, usize)>,
+    pub(crate) app: Option<AppUpdateStatus>,
 }
 
 /// E104: run `check_catalog_update` for every cache row with a recorded
@@ -66,10 +71,15 @@ async fn poll_catalog(
             per_game.push((g.id.clone(), stale));
         }
     }
+    // Self-update rides the same run (no new timer): one latest-release
+    // hit next to the catalog hits. The check is infallible (failures are
+    // Unknown), so it cannot fail the poll.
+    let app = check_app_update().await;
     Ok(PollReport {
         available,
         installed_zero,
         per_game,
+        app: Some(app),
     })
 }
 
@@ -212,6 +222,11 @@ impl Shell {
         for (game, _) in &per_game {
             keep.insert(format!("game:{game}"));
         }
+        // Self-update ride-along: state + `app:` card (Unknown passes the
+        // card through; Updating/Updated are terminal for the process).
+        if let Some(app) = report.app {
+            self.apply_app_poll(app, &mut keep, cx);
+        }
         self.notices.retain_attention(&keep);
         // Page badges refresh without extra GitHub hits: the poll already
         // recorded catalog statuses; cards compare locally below.
@@ -282,35 +297,10 @@ impl Shell {
         self.maybe_poll_updates_active(active, cx);
     }
 
-    /// E101: one Attention card — sidecar only, deduped by `key`, X is a
-    /// session-dismiss. E104 fills the lane from the catalog poll.
-    pub(crate) fn emit_attention(
-        &mut self,
-        key: &str,
-        kind: NoticeKind,
-        text: String,
-        cx: &mut Context<Self>,
-    ) {
-        self.notices.emit_attention(key, kind, text);
-        cx.notify();
-    }
-
-    /// info/ok leave the overlay after `notice::AUTOHIDE`; warn/err have no
-    /// timer (they wait for X). One one-shot sleep per emit, never a poll.
-    pub(crate) fn schedule_autohide(&mut self, kind: NoticeKind, cx: &mut Context<Self>) {
-        if !matches!(kind, NoticeKind::Info | NoticeKind::Ok) {
-            return;
-        }
-        cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(notice::AUTOHIDE).await;
-            let _ = this.update(cx, |_, cx| cx.notify());
-        })
-        .detach();
-    }
-
     /// E104: follow one Attention card. `catalog:<id>` → Settings Mods;
-    /// `game:<id>` → that game's Mods tab. Closes the sidecar first so
-    /// the target page paints without the panel over it.
+    /// `game:<id>` → that game's Mods tab; `app:<tag>` → Settings General.
+    /// Closes the sidecar first so the target page paints without the panel
+    /// over it.
     pub(crate) fn follow_attention(&mut self, key: &str, cx: &mut Context<Self>) {
         // Guard before any push or mutation: a blocked nav leaves history
         // untouched and the sidecar open under the discard modal.
@@ -322,6 +312,10 @@ impl Shell {
         } else if key.starts_with("catalog:") {
             Some(ConfigNavPending::Place(Place::Settings {
                 tab: SettingsTab::Mods,
+            }))
+        } else if key.starts_with("app:") {
+            Some(ConfigNavPending::Place(Place::Settings {
+                tab: SettingsTab::General,
             }))
         } else {
             None
@@ -346,6 +340,17 @@ impl Shell {
                 self.drop_preview_disclosure();
             }
             self.settings_tab = SettingsTab::Mods;
+            self.persist_settings_tab();
+            if self.nav == Nav::Settings {
+                self.load_settings_tab(cx);
+            } else {
+                self.enter_settings(cx);
+            }
+        } else if key.starts_with("app:") {
+            if self.nav != Nav::Settings || self.settings_tab != SettingsTab::General {
+                self.drop_preview_disclosure();
+            }
+            self.settings_tab = SettingsTab::General;
             self.persist_settings_tab();
             if self.nav == Nav::Settings {
                 self.load_settings_tab(cx);

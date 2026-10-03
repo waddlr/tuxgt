@@ -9,6 +9,7 @@ mod load;
 mod load_mods;
 mod nav;
 mod overlay;
+mod overlay_card;
 mod page;
 mod paint_ids;
 mod poll;

@@ -252,26 +252,30 @@ impl Shell {
             ))
             .child(
                 h_flex()
-                    .gap_2()
+                    .w_full()
                     .items_center()
+                    .justify_between()
                     .child(
-                        img(super::icon_file())
-                            .w(px(32.))
-                            .h(px(32.))
-                            .rounded(px(6.)),
+                        h_flex()
+                            .gap_2()
+                            .items_center()
+                            .child(
+                                img(super::icon_file())
+                                    .w(px(32.))
+                                    .h(px(32.))
+                                    .rounded(px(6.)),
+                            )
+                            .child(
+                                v_flex()
+                                    .child(
+                                        div()
+                                            .tx(t.headline_md)
+                                            .child(self.strings.get("gui-title")),
+                                    )
+                                    .child(widgets::muted(format!("v{version} · {built}"), cx)),
+                            ),
                     )
-                    .child(
-                        v_flex()
-                            .child(div().tx(t.headline_md).child(self.strings.get("gui-title")))
-                            .child(widgets::muted(format!("v{version} · {built}"), cx)),
-                    )
-                    .child(widgets::open_btn(
-                        "about-repo",
-                        widgets::OpenKind::Link,
-                        self.strings.get("gui-action-repo"),
-                        Some("https://github.com/waddlr/tuxgt".to_string()),
-                        cx,
-                    )),
+                    .child(self.about_head_actions(view.clone(), cx)),
             )
             .child(widgets::labeled_row(
                 "about-install",

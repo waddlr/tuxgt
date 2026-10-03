@@ -141,6 +141,15 @@ pub(crate) enum Cmd {
         #[arg(long, short = 'y')]
         yes: bool,
     },
+    /// Check for a TuxGT release, or download and apply one
+    Update {
+        /// Print current/latest/status without downloading or writing
+        #[arg(long)]
+        check: bool,
+        /// Apply without a prompt
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -250,8 +259,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // itself does not exist yet (first `install` into the default prefix).
     let strings = Strings::en_us()?;
     let cli = Cli::parse();
-    let want_file_log =
-        !matches!(cli.cmd, Some(Cmd::Install { check: true, .. })) && data_dir().is_dir();
+    let want_file_log = !matches!(
+        cli.cmd,
+        Some(Cmd::Install { check: true, .. }) | Some(Cmd::Update { check: true, .. })
+    ) && data_dir().is_dir();
     let log_dir = data_dir().join("logs");
     let current: Option<(String, std::fs::File)> = want_file_log
         .then(|| log::create_run_log(&log_dir))

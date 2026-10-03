@@ -22,6 +22,7 @@ pub mod stage;
 mod strings;
 #[cfg(test)]
 pub(crate) mod testing;
+pub mod update;
 pub mod userland;
 pub mod wrapper;
 
@@ -50,9 +51,9 @@ pub use download::{
     list_family_assets_many, list_reshade_packages, manifest_path, preview_effect_files,
     read_manifest, render_game_art, set_file_enabled, set_manifest_enabled, set_mod_env_enabled,
     sha256_file, sha256_hex, thumb_file, tool_status, touch_game_art, unpack, write_manifest,
-    ArtKind, CachedAsset, ExtTool, FamilyAsset, FetchProgress, FileManifest, ModProvenance,
-    PlannedEnv, PlannedFile, ProgressSink, ReshadePackage, ReshadePackageKind, ToolStatus,
-    EXT_TOOLS,
+    ArtKind, CachedAsset, CancelFlag, ExtTool, FamilyAsset, FetchProgress, FileManifest,
+    ModProvenance, PlannedEnv, PlannedFile, ProgressSink, ReshadePackage, ReshadePackageKind,
+    ToolStatus, EXT_TOOLS,
 };
 pub use env::{
     count_set_env, custom_env, disable_global_knob, disable_knob, effective_knob_value,
@@ -130,6 +131,11 @@ pub use session::{
 pub use stage::{
     check_rel, remove_runtime_dests, remove_staging, runtime_dir, stage_dir, stage_status,
     staged_shas, sync_staging, StageInput, StageLine, StageState,
+};
+pub use update::{
+    app_version, apply_app_update, check_app_update, load_prefix_manifest, parse_app_version,
+    save_prefix_manifest, AppUpdateReport, AppUpdateStatus, AppVersion, PrefixFile, PrefixManifest,
+    UPDATE_ASSET, UPDATE_OWNER, UPDATE_REPO,
 };
 pub use userland::{
     collapse_icon_paths, expand_tilde, host_inventory_from_intended, icons_check_line,
