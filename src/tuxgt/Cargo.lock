@@ -7749,7 +7749,7 @@ dependencies = [
 
 [[package]]
 name = "tuxgt"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -7774,7 +7774,7 @@ dependencies = [
 
 [[package]]
 name = "tuxgt-core"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "fluent",
  "futures-util",
