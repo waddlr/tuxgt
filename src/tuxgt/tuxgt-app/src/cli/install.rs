@@ -119,6 +119,14 @@ fn run_install(prefix: Option<PathBuf>, yes: bool) -> CliResult {
     if rep.moved {
         println!("moved\t{} -> {}", src.display(), p.display());
     }
+    if rep.overlaid > 0 {
+        println!(
+            "overlaid\t{} -> {} ({} files)",
+            src.display(),
+            p.display(),
+            rep.overlaid
+        );
+    }
     println!(
         "to relocate: mv {} <NEW> && <NEW>/bin/tuxgt install",
         p.display()

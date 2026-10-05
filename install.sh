@@ -198,6 +198,7 @@ confirm() {
 }
 
 need_fetch=1
+installed=0
 if [ -f "$dest/bin/tuxgt" ]; then
     have="$(installed_ver "$dest/bin/tuxgt" || true)"
     latest="$(resolve_latest || true)"
@@ -245,12 +246,18 @@ if [ "$need_fetch" -eq 1 ]; then
             rm -rf "$src"
         fi
     else
-        cp -a "$src/." "$dest/"
+        # Update: the staged tree's own binary overlays the prefix
+        # (per-file atomic, drop-gone officials) and refreshes host
+        # files. Never executes the installed tree (SIGILL recovery).
+        "$src/bin/tuxgt" install --prefix "$dest" --yes
+        installed=1
     fi
 fi
 
-say "Writing host files …"
-"$dest/bin/tuxgt" install --prefix "$dest" --yes
+if [ "$installed" -eq 0 ]; then
+    say "Writing host files …"
+    "$dest/bin/tuxgt" install --prefix "$dest" --yes
+fi
 
 app="$dest/bin/tuxgt"
 [ -x "$app" ] || { echo "error: $app missing after install" >&2; exit 1; }

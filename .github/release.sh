@@ -176,6 +176,7 @@ run make package TYPE=release
 # promote-beta tarball built from X.Y.Z-beta.N cannot satisfy X.Y.Z.
 if [ "$DRY_RUN" = "1" ]; then
     echo "+ verify $TARBALL embeds tuxgt/$NEW"
+    echo "+ make check-baseline TYPE=release"
 else
     [ -f "$TARBALL" ] || fail "$TARBALL missing after 'make package TYPE=release'"
     tar -tzf "$TARBALL" | grep -qx 'tuxgt/bin/tuxgt' || fail "$TARBALL: missing tuxgt/bin/tuxgt"
@@ -183,6 +184,7 @@ else
         | grep -qaE "tuxgt/${NEW//./\\.}([^0-9.-]|$)" \
         || fail "$TARBALL binary does not embed tuxgt/$NEW (stale build); refusing to tag"
     echo "packaged version verified: $NEW"
+    make check-baseline TYPE=release
 fi
 
 run git tag -a "$TAG" -m "TuxGT $TAG"

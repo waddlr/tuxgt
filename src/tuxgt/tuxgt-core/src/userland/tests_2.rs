@@ -133,6 +133,159 @@ fn uninstall_skips_modified_paths_and_keeps_prefix_tree() {
 }
 
 #[test]
+#[cfg(unix)]
+fn reinstall_over_existing_prefix_replaces_program_files() {
+    // Issue #1: re-running `tuxgt install` from a fresh tree must replace
+    // the prefix program files, never silently keep the stale tree.
+    let base = inv_base("reinstall-replace");
+    let home = base.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let put = |root: &Path, rel: &str, bytes: &[u8]| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, bytes).unwrap();
+    };
+    // Old live prefix: stale program files, a dropped official, user data.
+    let dest = base.join("dest");
+    for rel in [
+        "bin/tuxgt",
+        "bin/tuxgt-launcher",
+        "lib/libtuxgt-launcher.so",
+        "share/protonfixes/tuxgt_apply.py",
+        "share/templates/add.toml",
+        "share/icons/hicolor/16x16/apps/tuxgt.png",
+        "share/applications/tuxgt.desktop",
+        "mods/official/kept.toml",
+        "mods/official/gone.toml",
+    ] {
+        put(&dest, rel, b"OLD");
+    }
+    put(&dest, "mods/official/kept/payload.bin", b"kept-payload");
+    put(&dest, "mods/official/gone/payload.bin", b"gone-payload");
+    for (rel, bytes) in [
+        ("games/g0/sentinel.txt", b"user-game" as &[u8]),
+        ("downloads/keep.part", b"user-download"),
+        ("config/tuxgt.sqlite", b"user-db"),
+        ("mods/user/mine.toml", b"user-recipe"),
+        ("mods/user/mine/payload.bin", b"user-payload"),
+        ("mods/contrib/other.toml", b"registry"),
+    ] {
+        put(&dest, rel, bytes);
+    }
+    // Fresh unpacked tree: new program files, tarball layout (no payloads,
+    // no user dirs) plus junk a real tarball never ships.
+    let src = base.join("src");
+    for rel in [
+        "bin/tuxgt",
+        "bin/tuxgt-launcher",
+        "lib/libtuxgt-launcher.so",
+        "share/protonfixes/tuxgt_apply.py",
+        "share/templates/add.toml",
+        "share/icons/hicolor/16x16/apps/tuxgt.png",
+        "share/applications/tuxgt.desktop",
+        "mods/official/kept.toml",
+        "mods/official/fresh.toml",
+    ] {
+        put(&src, rel, b"NEW");
+    }
+    for rel in [
+        "games/evil.txt",
+        "config/evil.txt",
+        "downloads/evil.txt",
+        "mods/user/evil.toml",
+    ] {
+        put(&src, rel, b"evil");
+    }
+    std::os::unix::fs::symlink("/etc/hostname", src.join("bin/evil-link")).unwrap();
+
+    let rep = install_userland_with_home(&src, &dest, &home).unwrap();
+    assert!(!rep.moved, "existing prefix is overlaid, not moved");
+    assert!(!rep.in_place);
+    // 2 bin + 1 lib + 1 protonfixes + 1 template + 1 icon + 2 official
+    // TOMLs (desktop skipped, install rewrites it; src junk + symlink skipped).
+    assert_eq!(rep.overlaid, 8);
+    for rel in [
+        "bin/tuxgt",
+        "bin/tuxgt-launcher",
+        "lib/libtuxgt-launcher.so",
+        "share/templates/add.toml",
+        "share/icons/hicolor/16x16/apps/tuxgt.png",
+        "mods/official/kept.toml",
+        "mods/official/fresh.toml",
+    ] {
+        assert_eq!(
+            std::fs::read(dest.join(rel)).unwrap(),
+            b"NEW",
+            "replaced: {rel}"
+        );
+    }
+    // Hook scripts refresh from the baked copy (stale bytes gone).
+    assert_eq!(
+        std::fs::read(dest.join("share/protonfixes/tuxgt_apply.py")).unwrap(),
+        TUXGT_APPLY_PY.as_bytes()
+    );
+    // Dropped official: toml + payload dir gone; kept payload intact.
+    assert!(!dest.join("mods/official/gone.toml").exists());
+    assert!(!dest.join("mods/official/gone").exists());
+    assert_eq!(
+        std::fs::read(dest.join("mods/official/kept/payload.bin")).unwrap(),
+        b"kept-payload"
+    );
+    // User data untouched.
+    for (rel, bytes) in [
+        ("games/g0/sentinel.txt", b"user-game" as &[u8]),
+        ("downloads/keep.part", b"user-download"),
+        ("config/tuxgt.sqlite", b"user-db"),
+        ("mods/user/mine.toml", b"user-recipe"),
+        ("mods/user/mine/payload.bin", b"user-payload"),
+        ("mods/contrib/other.toml", b"registry"),
+    ] {
+        assert_eq!(
+            std::fs::read(dest.join(rel)).unwrap(),
+            bytes,
+            "untouched: {rel}"
+        );
+    }
+    // Src junk never lands in the prefix.
+    for rel in [
+        "games/evil.txt",
+        "config/evil.txt",
+        "downloads/evil.txt",
+        "mods/user/evil.toml",
+        "bin/evil-link",
+    ] {
+        assert!(!dest.join(rel).exists(), "never copied: {rel}");
+    }
+    // Package modes (deploy parity): 755 executables, 644 the rest.
+    use std::os::unix::fs::PermissionsExt;
+    let mode = |rel: &str| {
+        std::fs::metadata(dest.join(rel))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777
+    };
+    assert_eq!(mode("bin/tuxgt"), 0o755);
+    assert_eq!(mode("lib/libtuxgt-launcher.so"), 0o755);
+    assert_eq!(mode("share/templates/add.toml"), 0o644);
+    // Desktop rewritten for this prefix; themed icons follow the new tree.
+    let desk = std::fs::read_to_string(dest.join("share/applications/tuxgt.desktop")).unwrap();
+    assert!(desk.contains(&format!("Exec={}/bin/tuxgt", rep.prefix.display())));
+    assert_eq!(
+        std::fs::read(home.join(".local/share/icons/hicolor/16x16/apps/tuxgt.png")).unwrap(),
+        b"NEW"
+    );
+    // Conf + PATH links point at the live prefix.
+    let conf = std::fs::read_to_string(home.join(".config/tuxgt.conf")).unwrap();
+    assert!(conf.contains(&format!("TUXGT_DATA={}", rep.prefix.display())));
+    assert_eq!(
+        std::fs::read_link(home.join(".local/bin/tuxgt")).unwrap(),
+        rep.prefix.join("bin/tuxgt")
+    );
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
 fn uninstall_without_inventory_errors_install_once() {
     let base = inv_base("e68-noinv");
     let prefix = base.join("pfx");

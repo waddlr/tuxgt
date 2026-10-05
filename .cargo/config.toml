@@ -1,0 +1,7 @@
+# Baseline x86-64 for every build (issue #1: unpinned target-cpu shipped
+# AVX-512 codegen that SIGILLs on CPUs without it). Covers bare `cargo`
+# invocations; the Makefile also sets RUSTFLAGS explicitly so a hostile
+# RUSTFLAGS in the environment cannot override the pin (env wins over this
+# file, so this file alone is not enough). `make check-baseline` gates ship.
+[build]
+rustflags = ["-C", "target-cpu=x86-64"]

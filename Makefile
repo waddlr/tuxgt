@@ -23,7 +23,12 @@ endif
 
 BIN_SRC := src/tuxgt/target/$(TARGET_SUBDIR)/tuxgt
 
-.PHONY: all preload proxy build prepare package deploy release clean clean-full
+# Baseline CPU for ALL build types (issue #1). Set on the cargo command line
+# below so it wins over any RUSTFLAGS in the environment (env beats
+# .cargo/config.toml); the config file covers only bare `cargo` invocations.
+TUXGT_TARGET_CPU := x86-64
+
+.PHONY: all preload proxy build prepare package deploy release clean clean-full check-baseline
 
 PREPARE := $(BUILD)/pkg/tuxgt
 
@@ -63,7 +68,17 @@ $(BUILD)/nvngx_dlssnr.dll: $(PROXY_SRC)/proxy.c $(PROXY_SRC)/nvngx_dlssnr.def
 # line tables. TYPE=release: what ships.
 build:
 	@case "$(TYPE)" in dev|trace|release) ;; *) echo "error: TYPE must be dev|trace|release (got '$(TYPE)')" >&2; exit 1;; esac
-	cd src/tuxgt && cargo build $(CARGO_ARGS) -p tuxgt
+	cd src/tuxgt && RUSTFLAGS="-C target-cpu=$(TUXGT_TARGET_CPU)" cargo build $(CARGO_ARGS) -p tuxgt
+
+# Fail-closed baseline gate (issue #1): the newest tuxgt bin fingerprint for
+# this TYPE must carry the exact `-C target-cpu=` pin. Missing fingerprints
+# fail (run `build` first). release.sh calls this before tag/push/upload.
+check-baseline:
+	@case "$(TYPE)" in dev|trace|release) ;; *) echo "error: TYPE must be dev|trace|release (got '$(TYPE)')" >&2; exit 1;; esac
+	@newest=$$(ls -t src/tuxgt/target/$(TARGET_SUBDIR)/.fingerprint/tuxgt-*/bin-tuxgt.json 2>/dev/null | head -1); \
+	if [ -z "$$newest" ]; then echo "error: no tuxgt fingerprint under target/$(TARGET_SUBDIR) (run 'make build TYPE=$(TYPE)' first)" >&2; exit 1; fi; \
+	grep -q '"target-cpu=$(TUXGT_TARGET_CPU)"' "$$newest" || { echo "error: $$newest lacks -C target-cpu=$(TUXGT_TARGET_CPU); refusing to ship" >&2; exit 1; }; \
+	echo "baseline verified: $$newest carries target-cpu=$(TUXGT_TARGET_CPU)"
 
 clean:
 	@if [ -d "$(BUILD)" ]; then find "$(BUILD)" -mindepth 1 -maxdepth 1 ! -name 'pfx-*' -exec rm -rf {} +; fi

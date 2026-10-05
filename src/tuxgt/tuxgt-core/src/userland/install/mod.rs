@@ -1,8 +1,12 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+mod overlay;
+
 use super::*;
 use crate::{Error, Result};
+
+pub(crate) use overlay::*;
 
 /// `rename(2)` cross-device error (Linux value; no libc dep for one constant).
 pub(crate) const EXDEV: i32 = 18;
@@ -19,6 +23,9 @@ pub struct InstallReport {
     pub moved: bool,
     /// `rename` hit `EXDEV`; links + conf point at the source tree.
     pub in_place: bool,
+    /// Program files overlaid from the source tree (reinstall over an
+    /// existing prefix); 0 for a fresh move / same-tree run.
+    pub overlaid: usize,
     pub conf: PathBuf,
     pub bin_links: Vec<(PathBuf, PathBuf)>,
     pub desktop_target: PathBuf,
@@ -157,8 +164,10 @@ pub fn install_userland(src_prefix: &Path, dest: &Path) -> Result<InstallReport>
 }
 
 /// `install_userland` with an explicit home dir (tests pass a temp dir;
-/// production passes `$HOME`). Reconciles: drops stale owned host paths
-/// from the previous inventory, writes the intended set, saves inventory.
+/// production passes `$HOME`). Over an existing prefix it overlays this
+/// tree's program files first (deploy parity); then reconciles: drops
+/// stale owned host paths from the previous inventory, writes the
+/// intended set, saves inventory.
 pub fn install_userland_with_home(
     src_prefix: &Path,
     dest: &Path,
@@ -176,14 +185,15 @@ pub fn install_userland_with_home(
     let src_canon = std::fs::canonicalize(src_prefix).unwrap_or_else(|_| src_prefix.to_path_buf());
     let dest_canon = std::fs::canonicalize(&dest).unwrap_or_else(|_| dest.clone());
 
-    let (prefix, moved, in_place) = if src_canon == dest_canon {
-        (dest_canon, false, false)
+    let (prefix, moved, in_place, overlaid) = if src_canon == dest_canon {
+        (dest_canon, false, false, 0)
     } else if !dest.exists() {
         match std::fs::rename(&src_canon, &dest) {
             Ok(()) => (
                 std::fs::canonicalize(&dest).unwrap_or(dest.clone()),
                 true,
                 false,
+                0,
             ),
             Err(e) if e.raw_os_error() == Some(EXDEV) => {
                 eprintln!(
@@ -193,12 +203,15 @@ pub fn install_userland_with_home(
                     dest.display(),
                     dest.display()
                 );
-                (src_canon.clone(), false, true)
+                (src_canon.clone(), false, true, 0)
             }
             Err(e) => return Err(Error::Io(e)),
         }
     } else if dest.join("bin/tuxgt").is_file() {
-        (dest_canon, false, false)
+        // Reinstall over an existing prefix (issue #1): overlay this
+        // tree's program files, never silently keep the stale tree.
+        let overlaid = overlay_prefix_tree(&src_canon, &dest_canon)?;
+        (dest_canon, false, false, overlaid)
     } else {
         return Err(Error::Install(format!(
             "refusing to clobber {}",
@@ -293,6 +306,7 @@ pub fn install_userland_with_home(
         prefix,
         moved,
         in_place,
+        overlaid,
         conf,
         bin_links,
         desktop_target,
@@ -365,7 +379,7 @@ pub(crate) fn remove_stale_owned(
 pub(crate) const HOOK_MARKER: &str = "tuxgt-proton-hook v1";
 pub(crate) const WRAPPED_NAME: &str = "_tuxgt_wrapped_default.py";
 
-pub const DEFAULT_PY: &str = include_str!("../../../../protonfixes-hook/default.py");
-pub const DEFAULT_WRAP_PY: &str = include_str!("../../../../protonfixes-hook/default_wrap.py");
-pub const TUXGT_PY: &str = include_str!("../../../../protonfixes-hook/tuxgt.py");
-pub const TUXGT_APPLY_PY: &str = include_str!("../../../../protonfixes-hook/tuxgt_apply.py");
+pub const DEFAULT_PY: &str = include_str!("../../../../../protonfixes-hook/default.py");
+pub const DEFAULT_WRAP_PY: &str = include_str!("../../../../../protonfixes-hook/default_wrap.py");
+pub const TUXGT_PY: &str = include_str!("../../../../../protonfixes-hook/tuxgt.py");
+pub const TUXGT_APPLY_PY: &str = include_str!("../../../../../protonfixes-hook/tuxgt_apply.py");

@@ -12,6 +12,8 @@ The tarball is the app + launcher + share (`share/templates/*.toml` Add template
 
 Local-test payloads only (not the tarball). Same conf path. Missing conf → same error.
 
+Reinstall over an existing prefix (issue #1, decided 2026-10-05): when the dest prefix already holds `bin/tuxgt`, `tuxgt install` overlays this tree's program files first — `bin/`, `lib/`, `share/` (except `share/applications/tuxgt.desktop`, rewritten for the prefix right after), plus `mods/official/*.toml` with deploy's drop-gone rule — then runs the normal host refresh. The silent keep is wrong: a re-run from a newer/different unpacked tree always replaces `bin/tuxgt` (tmp + rename per file, package modes). `games/`, `downloads/`, `config/` (except the inventory itself), `mods/user/`, registries, and kept official payloads are never touched. A dest dir without `bin/tuxgt` still refuses to clobber.
+
 | Target | Into `$TUXGT_DATA` |
 |---|---|
 | `make deploy-addons` | `mods/tuxgt.addon64`, `mods/tuxgt-nr.addon64` (builds them) |
@@ -50,7 +52,7 @@ Only host files outside PREFIX: `~/.local/bin/tuxgt`, `~/.local/bin/tuxgt-launch
 
 ### Protonfixes hook (copies, not symlinks)
 
-`tuxgt install` (`install_proton_hook`) writes **files**. Settings → General → TuxGT Install runs the same `install --yes` (and `uninstall --yes`) against `data_dir()`. Intended files are overwritten from the baked copy every install (including modified-ours hook files, per the marker rule below). Stdout lists PREFIX layout, PATH/desktop/conf, `hooks\t$PREFIX/share/protonfixes/`, `icons\t<ok>/<total>` for the 9 themed icons, and one `hook\t<path>` per written `localfixes` file (native, plus Heroic Flatpak when that tree exists).
+`tuxgt install` (`install_proton_hook`) writes **files**. Settings → General → TuxGT Install runs the same `install --yes` (and `uninstall --yes`) against `data_dir()`. Intended files are overwritten from the baked copy every install (including modified-ours hook files, per the marker rule below). Stdout lists PREFIX layout, PATH/desktop/conf, `hooks\t$PREFIX/share/protonfixes/`, `icons\t<ok>/<total>` for the 9 themed icons, and one `hook\t<path>` per written `localfixes` file (native, plus Heroic Flatpak when that tree exists), plus `overlaid\t<src> -> <prefix> (<n> files)` on a reinstall overlay.
 
 | Path | Writer | Launch |
 |---|---|---|

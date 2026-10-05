@@ -105,16 +105,15 @@ tuxgt update
 
 This refreshes `bin/`, `lib/`, `share/`, and `mods/official/` (tracked, so files a release drops are removed again) while leaving `games/`, `downloads/`, `config/`, and `mods/user/` alone, then refreshes the host files from the new build. Restart TuxGT after updating.
 
-To update by hand instead, download the newer `tuxgt.tar.gz` from [Releases](https://github.com/waddlr/tuxgt/releases), unpack it somewhere OUTSIDE your prefix (for example `~/Downloads`), then overlay the new program files onto the prefix:
+To update by hand instead, download the newer `tuxgt.tar.gz` from [Releases](https://github.com/waddlr/tuxgt/releases), unpack it somewhere OUTSIDE your prefix (for example `~/Downloads`), then run the new tree's installer against the prefix:
 
 ```sh
 cd ~/Downloads
 tar -xzf tuxgt.tar.gz
-cp -a tuxgt/. ~/tuxgt/
-~/tuxgt/bin/tuxgt install --yes
+./tuxgt/bin/tuxgt install --prefix ~/tuxgt --yes
 ```
 
-(If your prefix is not `~/tuxgt`, use that path in both commands. Do not run the new tree's `install` directly: when a prefix already exists at the destination, `install` keeps the old tree and only refreshes host files, orphaning the new binaries.)
+(If your prefix is not `~/tuxgt`, use that path. The installer overlays the new program files atomically — dropped official recipes are removed — while leaving `games/`, `downloads/`, `config/`, and `mods/user/` alone.)
 
 To relocate instead of updating in place:
 
