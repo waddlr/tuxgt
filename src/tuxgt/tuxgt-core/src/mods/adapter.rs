@@ -256,8 +256,10 @@ async fn plan_conversion(
     slots_chosen: bool,
 ) -> Result<ConvertPlan> {
     let from = game_adapter(pool, game).await?;
-    // Refuse before any mutation: a recipe that disallows the target, or
-    // one that is gone entirely (its manifest could never be re-derived).
+    // Refuse before any mutation: an enabled instance's recipe that
+    // disallows the target, or one that is gone entirely (its manifest
+    // could never be re-derived). A disabled instance moves no files, so
+    // it never vetoes; its manifest still follows the choice.
     let mut moving: Vec<FileManifest> = Vec::new();
     let mut blocked: Vec<String> = Vec::new();
     let mut missing: Vec<String> = Vec::new();
@@ -284,6 +286,13 @@ async fn plan_conversion(
                     }
                     need_choice.push(m.instance.clone());
                 }
+                moving.push(m);
+            }
+            // A disabled instance moves no files, so a disallowing or
+            // missing recipe must not veto the conversion. The slot
+            // prompt above still applies while the recipe allows the
+            // target; a disabled pick stays manifest-only.
+            _ if !m.enabled => {
                 moving.push(m);
             }
             Ok(inst) => blocked.push(format!(

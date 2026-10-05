@@ -2,11 +2,10 @@ use super::super::{ClientStopOp, ConfirmOp, PendingConfirm, ReqDep, SlotChoiceOp
 use super::{
     apply_files_toggle, files_accordion_key, files_accordion_open, install_spawn_apply,
     install_work_parked, installed_targets, make_win_order, merge_install_queue, move_in_order,
-    order_install_ids, picker_rows, picker_targets, section_conflicts, section_rows, ModIds,
-    ModRow, SettingsModsTab,
+    move_to_edge, order_install_ids, picker_rows, picker_targets, section_rows, ModIds, ModRow,
+    SettingsModsTab,
 };
 use std::collections::{HashMap, HashSet};
-use tuxgt_core::LoadConflict;
 
 use super::{files_preview, shows_effects, FilesPreview};
 
@@ -108,45 +107,45 @@ fn make_win_orders_group_last_inside_section() {
     assert_eq!(make_win_order(&rows, "ghost", &["a".to_string()]), None);
 }
 
-/// Conflicts resolve per section: a group reaching into another section
-/// (the engine winner is decided there, out of Make-win's reach) and a
-/// mixed official/user group (the pin leaves no reachable winner) are
-/// both unpainted.
+/// Edge moves jump to the end of the card's same-officialness run
+/// inside its section: a user card never passes the pinned official
+/// above it, and sitting on the edge is a no-op.
 #[test]
-fn section_conflicts_are_same_kind_and_fully_inside() {
+fn move_to_edge_orders_run_edges() {
     let mut reshade = row("reshade", "reshade", true);
     reshade.official = true;
-    let rows = vec![
-        reshade,
-        row("my-effect", "effect", true),
-        row("renodx", "reshade_addon", true),
-        row("my-proxy", "custom", true),
-    ];
-    let conflict = |dest: &str, ids: &[&str]| LoadConflict {
-        dest: dest.into(),
-        adapter: "preload".into(),
-        instances: ids
-            .iter()
-            .map(|i| (*i).to_string())
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-    };
-    let cross = [conflict("dxgi.dll", &["my-effect", "my-proxy"])];
-    assert!(section_conflicts(&rows, SettingsModsTab::Reshade, &cross).is_empty());
-    // Two ReShade contenders plus a Custom one: the section-local pair is
-    // not painted either, because a later section owns the engine win.
-    let reach = [conflict(
-        "ReShade64.dll",
-        &["my-effect", "renodx", "my-proxy"],
-    )];
-    assert!(section_conflicts(&rows, SettingsModsTab::Reshade, &reach).is_empty());
-    let mixed = [conflict("ReShade64.dll", &["reshade", "my-effect"])];
-    assert!(section_conflicts(&rows, SettingsModsTab::Reshade, &mixed).is_empty());
-    let same = [conflict("ReShade64.dll", &["my-effect", "renodx"])];
-    let kept = section_conflicts(&rows, SettingsModsTab::Reshade, &same);
-    assert_eq!(kept.len(), 1);
-    assert_eq!(kept[0].dest, "ReShade64.dll");
-    assert_eq!(kept[0].instances, ["my-effect", "renodx"]);
+    let mut a = row("a", "effect", true);
+    a.load_order = 1;
+    let mut b = row("b", "effect", true);
+    b.load_order = 2;
+    let rows = vec![reshade, a, b];
+    assert_eq!(move_to_edge(&rows, "a", true), None);
+    assert_eq!(
+        move_to_edge(&rows, "b", true).unwrap(),
+        ["reshade", "b", "a"]
+    );
+    assert_eq!(
+        move_to_edge(&rows, "a", false).unwrap(),
+        ["reshade", "b", "a"]
+    );
+    assert_eq!(move_to_edge(&rows, "b", false), None);
+    assert_eq!(move_to_edge(&rows, "reshade", false), None);
+    assert_eq!(move_to_edge(&rows, "ghost", true), None);
+    // Officials form their own run: o1 sinks below o2 but never past u1.
+    let mut o1 = row("o1", "reshade", true);
+    o1.official = true;
+    let mut o2 = row("o2", "effect", true);
+    o2.official = true;
+    o2.load_order = 1;
+    let mut u1 = row("u1", "effect", true);
+    u1.load_order = 2;
+    let rows = vec![o1, o2, u1];
+    assert_eq!(move_to_edge(&rows, "o1", true), None);
+    assert_eq!(
+        move_to_edge(&rows, "o1", false).unwrap(),
+        ["o2", "o1", "u1"]
+    );
+    assert_eq!(move_to_edge(&rows, "o2", true).unwrap(), ["o2", "o1", "u1"]);
 }
 
 /// Preview buttons: `Effects` only for effect Mods with a recipe list;
@@ -257,13 +256,7 @@ fn installed_targets_skip_collapsed_sections() {
     ];
     let sections = SettingsModsTab::ALL
         .iter()
-        .map(|tab| {
-            (
-                *tab,
-                section_rows(&rows, *tab),
-                section_conflicts(&rows, *tab, &[]),
-            )
-        })
+        .map(|tab| (*tab, section_rows(&rows, *tab)))
         .collect::<Vec<_>>();
     assert_eq!(
         installed_targets(&sections, &HashSet::new()),

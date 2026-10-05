@@ -47,7 +47,7 @@ impl InstanceIds {
     }
 }
 
-/// Game mod-card ids (`game/card.rs`). Built in `load_mods_for`, which knows
+/// Game mod-card ids (`game/card/mod.rs`). Built in `load_mods_for`, which knows
 /// the game id the files-accordion key needs.
 #[derive(Clone)]
 pub struct ModIds {
@@ -59,6 +59,9 @@ pub struct ModIds {
     pub slot: SharedString,
     pub move_up: SharedString,
     pub move_down: SharedString,
+    pub move_top: SharedString,
+    pub move_bottom: SharedString,
+    pub conflict: SharedString,
     pub files_key: SharedString,
     pub files_id: SharedString,
 }
@@ -75,6 +78,9 @@ impl ModIds {
             slot: SharedString::from(format!("slot-{instance}")),
             move_up: SharedString::from(format!("move-up-{instance}")),
             move_down: SharedString::from(format!("move-down-{instance}")),
+            move_top: SharedString::from(format!("move-top-{instance}")),
+            move_bottom: SharedString::from(format!("move-bottom-{instance}")),
+            conflict: SharedString::from(format!("conflict-{instance}")),
             files_id: SharedString::from(format!("mod-files-{files_key}")),
             files_key: SharedString::from(files_key),
         }
@@ -189,15 +195,6 @@ pub(crate) fn mods_section_id(tab: SettingsModsTab) -> SharedString {
     }
 }
 
-/// Load-conflicts block id (`game/mods.rs`). Three static values.
-pub(crate) fn load_conflicts_id(tab: SettingsModsTab) -> SharedString {
-    match tab {
-        SettingsModsTab::Optiscaler => SharedString::new_static("load-conflicts-optiscaler"),
-        SettingsModsTab::Reshade => SharedString::new_static("load-conflicts-reshade"),
-        SettingsModsTab::Custom => SharedString::new_static("load-conflicts-custom"),
-    }
-}
-
 /// Host-install failure row id (`settings/host.rs`, `host-{i}` over the
 /// paint-time failure filter). Indices are small; the table covers 0..64 and
 /// anything beyond falls back to `format!` (same string either way).
@@ -242,6 +239,9 @@ mod tests {
         assert_eq!(ids.slot.as_str(), "slot-shaders");
         assert_eq!(ids.move_up.as_str(), "move-up-shaders");
         assert_eq!(ids.move_down.as_str(), "move-down-shaders");
+        assert_eq!(ids.move_top.as_str(), "move-top-shaders");
+        assert_eq!(ids.move_bottom.as_str(), "move-bottom-shaders");
+        assert_eq!(ids.conflict.as_str(), "conflict-shaders");
         assert_eq!(ids.files_key.as_str(), "skyrim/shaders");
         assert_eq!(ids.files_id.as_str(), "mod-files-skyrim/shaders");
     }
@@ -299,10 +299,6 @@ mod tests {
             assert_eq!(
                 mods_section_id(tab).as_str(),
                 format!("mods-section-{pref}")
-            );
-            assert_eq!(
-                load_conflicts_id(tab).as_str(),
-                format!("load-conflicts-{pref}")
             );
         }
     }

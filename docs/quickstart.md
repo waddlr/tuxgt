@@ -31,7 +31,7 @@ Mods are "recipes" — small text files that say where to fetch files and how to
 2. Pick a mod to try — for example **OptiScaler** (64-bit upscaler) or **ReShade** (post-processing).
    - If the mod needs ReShade first (for example a ReShade addon, shader, or texture), the app will prompt "The following additional mods are required for your selected install:" and list the missing mods. Click **Install required** and it will set up ReShade first.
 3. Click **Enable** (or **Install**) on the mod. If the content has not been downloaded yet, TuxGT fetches it now (you see a progress bar) and writes a manifest for this game. The first download may take a moment.
-4. If two mods want the same DLL slot (for example two things that both want `dxgi.dll`), the app shows a slot conflict and lets you pick a different slot (`dxgi`, `d3d9`, `d3d10`, `d3d11`, `d3d12`, `winmm`, `version`) or use **Make win** / the move arrows in **Load conflicts** to decide which wins. You normally do not need to change this.
+4. If two mods want the same DLL slot (for example two things that both want `dxgi.dll`), the app shows a slot conflict and lets you pick a different slot (`dxgi`, `d3d9`, `d3d10`, `d3d11`, `d3d12`, `winmm`, `version`) or use **Make win** on the losing card / the move arrows to decide which wins. You normally do not need to change this.
 5. Optional: after installing, expand the "N files" section on the card to see which files will be staged and which dest DLL name was chosen.
 
 If you picked ReShade, two extra steps before you Play:

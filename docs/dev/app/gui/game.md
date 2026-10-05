@@ -230,15 +230,22 @@ slot conflicts.
 installed cards only. The GUI paints section-major order and writes it back on
 any reorder (`set_load_order` still receives exactly the game’s installed ids); the engine
 order is the stored `load_order`, which a fresh install appends to
-(install order) and which only a reorder rewrites. Up/down move one card
-inside its own section; a user card never swaps past the pinned official above
-it (nor an official past a user card). A Load-conflicts block sits **inside
-the section owning the group** (hidden while the picker is open), names each
-contested dest with rivals in order and the winner, and gives every
-non-winner a Make-win button that moves that rival past the group’s other
-members inside its own section. Groups spanning two sections, or mixing
-official and user cards (the official pin leaves no reachable winner), are
-not painted.
+(install order) and which only a reorder rewrites. The move cluster
+(to-top / up / down / to-bottom) moves one card inside its own section,
+within its same-officialness run; a user card never passes the pinned
+official above it (nor an official a user card).
+
+Every contested dest marks both sides. The card header carries a
+conflict icon — warning tint when the card loses any file, success
+tint when it wins them all — whose tooltip names each contested dest
+with the rivals on each side; each contested file row in the expanded
+list carries the same marker, its tooltip splitting the other
+providers into loses-to and wins-over. Markers are display-only:
+reordering stays on the card, where every dest the card loses paints
+a row with a Make-win button that moves this card past that group's
+other members. Groups no reorder can win — a contender in another
+section, or a group mixing official and user cards under the pin —
+paint the row with a disabled button that says why.
 
 Tab chrome: one header row above the list, even when empty — the installed
 filter left, **Install** (primary, no Plus), **Force re-sync all** (outline +

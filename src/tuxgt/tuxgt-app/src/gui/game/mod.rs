@@ -3,6 +3,7 @@ mod about_more;
 mod appid;
 mod card;
 mod confirm;
+mod conflicts;
 mod custom_env;
 mod detect;
 mod detect_edit;
@@ -36,6 +37,7 @@ mod uninstall;
 mod wrappers;
 
 pub(crate) use confirm::*;
+pub(crate) use conflicts::*;
 pub(crate) use hero::*;
 pub(crate) use install_queue::*;
 pub(crate) use launch::*;

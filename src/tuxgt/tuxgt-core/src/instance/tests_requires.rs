@@ -340,3 +340,56 @@ fn shadow_file_ignored_official_wins() {
     assert_eq!(listed.problems.len(), 1);
     assert!(listed.problems[0].reason.contains("shadows an official"));
 }
+
+#[test]
+fn degraded_official_ids_stay_reserved() {
+    let dir = temp_config();
+    // Parse-degraded: reshade keeps its id line but fails a later rule, like
+    // the shipped d3dcompiler-47 once did with a provided-only note.
+    let reshade = official_mods_dir(&dir).join("reshade.toml");
+    let poisoned = fs::read_to_string(&reshade).unwrap() + "note = \"boom\"\n";
+    fs::write(&reshade, poisoned).unwrap();
+    // Requires-pruned: dropping d3dcompiler-47 degrades its dependents too.
+    fs::remove_file(official_mods_dir(&dir).join("d3dcompiler-47.toml")).unwrap();
+    // Degraded ids refuse shadows: the list ignores user + registry files
+    // claiming them and the add guard rejects them — officials win even
+    // when unparseable.
+    let inst_dir = user_mods_dir(&dir);
+    fs::create_dir_all(&inst_dir).unwrap();
+    fs::write(
+        inst_dir.join("a.toml"),
+        sample_recipe("reshade", "\"preload\""),
+    )
+    .unwrap();
+    fs::write(
+        inst_dir.join("b.toml"),
+        sample_recipe("renodx-dlss", "\"preload\""),
+    )
+    .unwrap();
+    let reg = dir.join("mods").join("myreg");
+    fs::create_dir_all(&reg).unwrap();
+    fs::write(
+        reg.join("c.toml"),
+        sample_recipe("deep-fried-chicken-64bit", "\"preload\""),
+    )
+    .unwrap();
+    let listed = list_mods(&dir, &dir).unwrap();
+    assert_eq!(listed.mods.len(), n_official() - 4);
+    assert!(listed.mods.iter().all(|m| m.official));
+    assert_eq!(
+        listed
+            .problems
+            .iter()
+            .filter(|p| p.reason.contains("shadows an official"))
+            .count(),
+        3,
+        "{:?}",
+        listed.problems
+    );
+    for id in ["reshade", "renodx-dlss", "deep-fried-chicken-64bit"] {
+        let src = dir.join(format!("{id}-src.toml"));
+        fs::write(&src, sample_recipe(id, "\"preload\"")).unwrap();
+        let err = add_mod(&dir, &src, &dir).unwrap_err();
+        assert!(err.to_string().contains("shadows an official"), "{err}");
+    }
+}

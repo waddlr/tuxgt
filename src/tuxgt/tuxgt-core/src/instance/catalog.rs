@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::{Error, Result};
 
 use super::{
-    official_mods, official_mods_dir, parse_recipe, user_mods_dir, valid_registry, Mod, MODS_TOML,
+    official_mods, official_mods_dir, official_reserved_ids, parse_recipe, user_mods_dir,
+    valid_registry, Mod, MODS_TOML,
 };
 
 pub(crate) fn disabled_path(config_dir: &Path) -> PathBuf {
@@ -88,13 +89,14 @@ pub struct ModList {
 pub fn list_mods(config_dir: &Path, data_dir: &Path) -> Result<ModList> {
     migrate_prefix(data_dir, config_dir);
     let (officials, official_problems) = official_mods(&official_mods_dir(data_dir))?;
-    let taken: BTreeSet<String> = officials.iter().map(|i| i.id.clone()).collect();
+    let reserved = official_reserved_ids(&official_mods_dir(data_dir))?;
     let mut out = ModList {
         mods: officials,
         problems: official_problems,
     };
-    load_recipe_dir(&user_mods_dir(data_dir), None, &taken, &mut out)?;
-    let mut taken: BTreeSet<String> = out.mods.iter().map(|i| i.id.clone()).collect();
+    load_recipe_dir(&user_mods_dir(data_dir), None, &reserved, &mut out)?;
+    let mut taken: BTreeSet<String> = reserved;
+    taken.extend(out.mods.iter().map(|i| i.id.clone()));
     let root = data_dir.join("mods");
     if root.is_dir() {
         let mut regs: Vec<PathBuf> = fs::read_dir(&root)?

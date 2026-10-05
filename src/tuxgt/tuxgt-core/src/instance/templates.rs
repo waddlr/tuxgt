@@ -71,6 +71,40 @@ pub(crate) fn official_mods(share_dir: &Path) -> Result<(Vec<Mod>, Vec<ModProble
     Ok((loaded.into_iter().map(|(_, i)| i).collect(), problems))
 }
 
+/// Every id the official dir claims, including degraded files: each file's
+/// stem plus its `id` line when the file still parses as TOML (a poisoned
+/// recipe usually keeps a valid id line while failing a later rule). A
+/// broken official still reserves its id — officials win even when
+/// unparseable, so no user or registry file can shadow it while it is broken.
+pub(crate) fn official_reserved_ids(share_dir: &Path) -> Result<BTreeSet<String>> {
+    let mut out = BTreeSet::new();
+    if !share_dir.exists() {
+        return Ok(out);
+    }
+    let mut files: Vec<PathBuf> = fs::read_dir(share_dir)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+        .collect();
+    files.sort();
+    for path in &files {
+        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+            if valid_id(stem) {
+                out.insert(stem.to_string());
+            }
+        }
+        if let Ok(text) = fs::read_to_string(path) {
+            if let Ok(table) = toml::from_str::<toml::Table>(&text) {
+                if let Some(id) = table.get("id").and_then(|v| v.as_str()) {
+                    if valid_id(id) {
+                        out.insert(id.to_string());
+                    }
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// A pre-filled Mod form (lock 10): Provides (`type`), entry mode, and
 /// default Requires. Local file/folder source only; the GitHub-family mint
 /// is E63. Packaged TOML, not a Rust table.

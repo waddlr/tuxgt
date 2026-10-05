@@ -873,6 +873,65 @@ async fn disabled_instance_converts_without_copies() {
     let _ = tokio::fs::remove_dir_all(&fx.path()).await;
 }
 
+/// A disabled instance whose recipe disallows the target does not veto the
+/// conversion: the manifest still follows the choice, and nothing lands in
+/// the game dir until a re-enable.
+#[tokio::test]
+async fn disabled_disallowing_instance_does_not_block_convert() {
+    let fx = setup("dblk", &["ReShade64.dll"], ADAPTER_PRELOAD).await;
+    let recipe = recipe_file(&fx);
+    let text = fs::read_to_string(&recipe).unwrap();
+    fs::write(
+        &recipe,
+        text.replace(&default_plans_line(&fx), "plans_allowed = [\"preload\"]"),
+    )
+    .unwrap();
+    set_instance_enabled(&fx.pool, &fx.data, &fx.gid, &fx.iid, false, true)
+        .await
+        .unwrap();
+    convert(&fx, ADAPTER_INSTALL, true).await.unwrap();
+    assert_eq!(game_adapter(&fx.pool, &fx.gid).await.unwrap(), "install");
+    assert_eq!(fx.manifest().adapter, "install");
+    assert!(
+        !fx.dest("ReShade64.dll").is_file(),
+        "a disabled instance must not land in the game dir"
+    );
+    let m = set_instance_enabled(&fx.pool, &fx.data, &fx.gid, &fx.iid, true, true)
+        .await
+        .unwrap();
+    assert_eq!(m.adapter, "install");
+    assert!(fx.dest("ReShade64.dll").is_file());
+    let _ = tokio::fs::remove_dir_all(&fx.path()).await;
+}
+
+/// A disabled instance whose recipe is gone does not veto the conversion
+/// either. Enabled, the same missing recipe still blocks.
+#[tokio::test]
+async fn disabled_missing_recipe_does_not_block_convert() {
+    let fx = setup("dmis", &["ReShade64.dll"], ADAPTER_PRELOAD).await;
+    fs::remove_file(recipe_file(&fx)).unwrap();
+    let err = convert(&fx, ADAPTER_INSTALL, true).await.unwrap_err();
+    assert!(err.to_string().contains("recipe missing"), "{err}");
+    set_instance_enabled(&fx.pool, &fx.data, &fx.gid, &fx.iid, false, true)
+        .await
+        .unwrap();
+    convert(&fx, ADAPTER_INSTALL, true).await.unwrap();
+    assert_eq!(game_adapter(&fx.pool, &fx.gid).await.unwrap(), "install");
+    assert_eq!(fx.manifest().adapter, "install");
+    assert!(
+        !fx.dest("ReShade64.dll").is_file(),
+        "a disabled instance must not land in the game dir"
+    );
+    // The converted recipe-less manifest is still usable: re-enable lands
+    // the file under the persisted adapter.
+    let m = set_instance_enabled(&fx.pool, &fx.data, &fx.gid, &fx.iid, true, true)
+        .await
+        .unwrap();
+    assert_eq!(m.adapter, "install");
+    assert!(fx.dest("ReShade64.dll").is_file());
+    let _ = tokio::fs::remove_dir_all(&fx.path()).await;
+}
+
 /// Unknown game and unknown target are refused, never half-applied.
 #[tokio::test]
 async fn conversion_rejects_unknown_game_and_adapter() {

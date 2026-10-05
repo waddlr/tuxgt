@@ -1,25 +1,32 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use gpui_kit::component::button::ButtonVariants as _;
-use gpui_kit::component::{Disableable as _, IconName};
+use gpui_kit::component::{Disableable as _, IconNamed};
 use gpui_kit::*;
-use tuxgt_core::{
-    data_dir, open_db_shared, set_load_order, set_mod_env_enabled, FluentArgs, LoadConflict,
-};
+use tuxgt_core::{data_dir, open_db_shared, set_load_order, set_mod_env_enabled, FluentArgs};
 
 use super::super::widgets;
 use super::super::{rt_block, ModRow, SettingsModsTab, Shell};
 
+/// Card order-cluster command: one step, or the edge of the card's
+/// same-officialness run inside its section.
+#[derive(Clone, Copy)]
+pub(crate) enum MoveCmd {
+    Step(i32),
+    Top,
+    Bottom,
+}
+
 impl Shell {
     pub(crate) fn move_button(
         id: SharedString,
-        icon: IconName,
+        icon: impl IconNamed,
         tip: String,
         disabled: bool,
         view: &Entity<Self>,
         game_id: &str,
         inst: &str,
-        delta: i32,
+        cmd: MoveCmd,
         cx: &App,
     ) -> AnyElement {
         let view = view.clone();
@@ -33,8 +40,10 @@ impl Shell {
             .on_click(move |_, _, cx| {
                 let game_id = game_id.clone();
                 let inst = inst.clone();
-                view.update(cx, |this, cx| {
-                    this.move_mod_ui(&game_id, &inst, delta, cx);
+                view.update(cx, |this, cx| match cmd {
+                    MoveCmd::Step(delta) => this.move_mod_ui(&game_id, &inst, delta, cx),
+                    MoveCmd::Top => this.move_edge_ui(&game_id, &inst, true, cx),
+                    MoveCmd::Bottom => this.move_edge_ui(&game_id, &inst, false, cx),
                 });
             })
             .into_any_element()
@@ -95,6 +104,23 @@ impl Shell {
         let rows = self.mods.get(game).cloned().unwrap_or_default();
         tracing::debug!(action = "move-mod", game, instance, delta);
         let Some(order) = move_in_order(&rows, instance, delta) else {
+            return;
+        };
+        self.reorder_ui(game, order, cx);
+    }
+
+    /// Move one installed card to the edge of its same-officialness run
+    /// inside its section (`to_top`). Already there is a no-op.
+    pub(crate) fn move_edge_ui(
+        &mut self,
+        game: &str,
+        instance: &str,
+        to_top: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let rows = self.mods.get(game).cloned().unwrap_or_default();
+        tracing::debug!(action = "move-edge", game, instance, to_top);
+        let Some(order) = move_to_edge(&rows, instance, to_top) else {
             return;
         };
         self.reorder_ui(game, order, cx);
@@ -207,64 +233,13 @@ pub(crate) fn section_rows<'a>(rows: &'a [ModRow], tab: SettingsModsTab) -> Vec<
 /// (section-major) order. A collapsed section paints its header only, so its
 /// rows are out of scope (picker Select Visible parity).
 pub(crate) fn installed_targets(
-    sections: &[(SettingsModsTab, Vec<&ModRow>, Vec<SectionConflict>)],
+    sections: &[(SettingsModsTab, Vec<&ModRow>)],
     collapsed: &HashSet<String>,
 ) -> Vec<String> {
     sections
         .iter()
-        .filter(|(tab, _, _)| !collapsed.contains(tab.pref_id()))
-        .flat_map(|(_, rows, _)| rows.iter().map(|r| r.instance.clone()))
-        .collect()
-}
-
-/// One section-local dest conflict: contested dest + contenders in ascending
-/// load order (last wins).
-pub(crate) struct SectionConflict {
-    pub(crate) dest: String,
-    pub(crate) instances: Vec<String>,
-}
-
-/// `load_conflicts` groups that resolve inside a single section: every
-/// contender in `tab`'s section, all the same officialness (an official is
-/// pinned first, so a mixed group has no reachable winner). A group with a
-/// contender in another section is dropped whole — the engine winner there is
-/// decided across sections, which neither this line nor Make-win can express.
-pub(crate) fn section_conflicts(
-    rows: &[ModRow],
-    tab: SettingsModsTab,
-    conflicts: &[LoadConflict],
-) -> Vec<SectionConflict> {
-    if conflicts.is_empty() {
-        return Vec::new();
-    }
-    let members: HashMap<&str, bool> = section_rows(rows, tab)
-        .into_iter()
-        .map(|r| (r.instance.as_str(), r.official))
-        .collect();
-    conflicts
-        .iter()
-        .filter_map(|c| {
-            let inside: Vec<String> = c
-                .instances
-                .iter()
-                .filter(|i| members.contains_key(i.as_str()))
-                .cloned()
-                .collect();
-            if inside.len() < 2 || inside.len() != c.instances.len() {
-                return None;
-            }
-            let kind = *members.get(inside[0].as_str())?;
-            if inside
-                .iter()
-                .any(|i| members.get(i.as_str()) != Some(&kind))
-            {
-                return None;
-            }
-            Some(SectionConflict {
-                dest: c.dest.clone(),
-                instances: inside,
-            })
-        })
+        .filter(|(tab, _)| !collapsed.contains(tab.pref_id()))
+        .flat_map(|(_, rows)| rows.iter().map(|r| r.instance.clone()))
         .collect()
 }
 
@@ -317,6 +292,52 @@ pub(crate) fn move_in_order(rows: &[ModRow], instance: &str, delta: i32) -> Opti
     }
     section.swap(pos, swap as usize);
     Some(order_with_section(rows, tab, &section))
+}
+
+/// Section-local move of `instance` to the edge of its
+/// same-officialness run (`to_top`: first, else last) as a full
+/// permutation. `None` = already there, or unknown instance. The run
+/// never crosses the official pin boundary.
+pub(crate) fn move_to_edge(rows: &[ModRow], instance: &str, to_top: bool) -> Option<Vec<String>> {
+    let row = rows
+        .iter()
+        .find(|r| r.instance == instance && r.installed)?;
+    let tab = SettingsModsTab::for_type(&row.mod_type);
+    let section: Vec<String> = section_rows(rows, tab)
+        .into_iter()
+        .map(|r| r.instance.clone())
+        .collect();
+    let pos = section.iter().position(|i| i == instance)?;
+    let official = |id: &str| {
+        rows.iter()
+            .find(|r| r.instance == id)
+            .is_some_and(|r| r.official)
+    };
+    let mine = official(instance);
+    let edge = if to_top {
+        section.iter().position(|i| official(i) == mine)
+    } else {
+        section.iter().rposition(|i| official(i) == mine)
+    }?;
+    if edge == pos {
+        return None;
+    }
+    let mut out: Vec<String> = section
+        .iter()
+        .filter(|i| i.as_str() != instance)
+        .cloned()
+        .collect();
+    let at = if to_top {
+        out.iter()
+            .position(|i| official(i) == mine)
+            .unwrap_or(out.len())
+    } else {
+        out.iter()
+            .rposition(|i| official(i) == mine)
+            .map_or(out.len(), |i| i + 1)
+    };
+    out.insert(at, instance.to_string());
+    Some(order_with_section(rows, tab, &out))
 }
 
 /// Section-local Make-win: reinsert `instance` directly after the last other

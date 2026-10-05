@@ -639,12 +639,18 @@ gui-add-requires-pick = Pick a ReShade mod
 gui-add-requires-need = Pick a ReShade mod to enable Save
 gui-status-slot-changed = Slot for { $instance } changed to { $slot }
 
-# Load order: conflicts section + move buttons.
-gui-section-load-conflicts = Load conflicts
+# Load order: conflict markers + move buttons.
 gui-action-make-win = Make win
 gui-action-move-up = Move up
 gui-action-move-down = Move down
-gui-load-conflict-winner = { $instance } wins
+gui-action-move-top = Move to top
+gui-action-move-bottom = Move to bottom
+gui-conflict-loses = loses to { $mods }
+gui-conflict-wins = wins over { $mods }
+gui-conflict-tip-loses = Loses to: { $mods }
+gui-conflict-tip-wins = Wins over: { $mods }
+gui-conflict-no-win-section = A mod in another section decides this file
+gui-conflict-no-win-pinned = Official mods stay pinned first
 gui-status-reordered = Load order updated
 
 # E92 user-mod export (Settings Mods card + save picker).

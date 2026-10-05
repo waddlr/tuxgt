@@ -5,14 +5,17 @@ use std::collections::HashMap;
 use gpui_kit::component::button::Toggle;
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{h_flex, v_flex, ActiveTheme, Disableable as _, Sizable as _};
+use gpui_kit::component::{
+    h_flex, v_flex, ActiveTheme, Disableable as _, Icon, IconName, Sizable as _,
+};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use tuxgt_core::StageState;
+use tuxgt_core::{FluentArgs, StageState};
 
 use super::super::theme::{types, TypeStyled as _};
 use super::super::widgets;
 use super::super::Shell;
+use super::DestConflict;
 
 impl Shell {
     pub(crate) fn keep_rows(
@@ -22,6 +25,7 @@ impl Shell {
         rows: &[super::ModFileRow],
         env_rows: &[super::ModEnvRow],
         stage: &HashMap<&str, StageState>,
+        marks: &[DestConflict],
         view: Entity<Self>,
         cx: &App,
     ) -> impl IntoElement {
@@ -33,6 +37,7 @@ impl Shell {
                 instance,
                 dlls.as_slice(),
                 stage,
+                marks,
                 "gui-mod-section-loaddll",
                 view.clone(),
                 cx,
@@ -42,6 +47,7 @@ impl Shell {
                 instance,
                 files.as_slice(),
                 stage,
+                marks,
                 "gui-mod-section-include",
                 view.clone(),
                 cx,
@@ -57,6 +63,7 @@ impl Shell {
         instance: &str,
         rows: &[&super::ModFileRow],
         stage: &HashMap<&str, StageState>,
+        marks: &[DestConflict],
         title_id: &'static str,
         view: Entity<Self>,
         cx: &App,
@@ -64,7 +71,7 @@ impl Shell {
         let out: Vec<AnyElement> = rows
             .iter()
             .map(|f| {
-                self.file_row(game_id, instance, f, stage, view.clone(), cx)
+                self.file_row(game_id, instance, f, stage, marks, view.clone(), cx)
                     .into_any_element()
             })
             .collect();
@@ -96,17 +103,43 @@ impl Shell {
 
     /// E78 merged dest row, left → right: keep checkbox, mono
     /// `source-base → dest` mapping, sync pill for kept dests (no pill when
-    /// omitted or when no stage row exists yet).
+    /// omitted or when no stage row exists yet). A contested dest paints a
+    /// conflict marker first in the pill cluster: warning-tinted when this
+    /// card loses the file, success-tinted when it wins it.
     pub(crate) fn file_row(
         &self,
         game_id: &str,
         instance: &str,
         f: &super::ModFileRow,
         stage: &HashMap<&str, StageState>,
+        marks: &[DestConflict],
         view: Entity<Self>,
         cx: &App,
     ) -> impl IntoElement {
         let b = cx.theme();
+        let conflict: Option<AnyElement> = marks.iter().find(|m| m.dest == f.dest).map(|m| {
+            let mut lines = Vec::new();
+            if !m.loses_to.is_empty() {
+                let mut args = FluentArgs::new();
+                args.set("mods", m.loses_to.join(", "));
+                lines.push(self.strings.get_args("gui-conflict-tip-loses", Some(&args)));
+            }
+            if !m.wins_over.is_empty() {
+                let mut args = FluentArgs::new();
+                args.set("mods", m.wins_over.join(", "));
+                lines.push(self.strings.get_args("gui-conflict-tip-wins", Some(&args)));
+            }
+            let tip = lines.join("\n");
+            div()
+                .id(SharedString::from(format!("cm-{instance}-{}", f.dest)))
+                .child(
+                    Icon::new(IconName::TriangleAlert)
+                        .small()
+                        .text_color(if m.winning { b.success } else { b.warning }),
+                )
+                .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+                .into_any_element()
+        });
         let stage_pill: Option<AnyElement> = if f.enabled {
             stage.get(f.dest.as_str()).map(|s| {
                 let (label, fg, tip) = match s {
@@ -146,20 +179,22 @@ impl Shell {
         };
         let edit = self.staged_edit_button(game_id, instance, &f.dest, f.enabled, view.clone(), cx);
         let mode = self.file_mode_toggle(game_id, instance, f, view.clone());
-        // Mode, then Edit, then the sync pill.
-        let pill: Option<AnyElement> = if mode.is_none() && edit.is_none() && stage_pill.is_none() {
-            None
-        } else {
-            Some(
-                h_flex()
-                    .gap_1()
-                    .items_center()
-                    .children(mode)
-                    .children(edit)
-                    .children(stage_pill)
-                    .into_any_element(),
-            )
-        };
+        // Conflict marker, then Mode, Edit, and the sync pill.
+        let pill: Option<AnyElement> =
+            if conflict.is_none() && mode.is_none() && edit.is_none() && stage_pill.is_none() {
+                None
+            } else {
+                Some(
+                    h_flex()
+                        .gap_1()
+                        .items_center()
+                        .children(conflict)
+                        .children(mode)
+                        .children(edit)
+                        .children(stage_pill)
+                        .into_any_element(),
+                )
+            };
         let lock_tip = f
             .required
             .then(|| self.strings.get("gui-tip-file-required"));

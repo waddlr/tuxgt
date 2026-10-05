@@ -95,9 +95,11 @@ overrides per call.
 
 `convert_game_adapter(pool, data, config, game, target, yes, slots_chosen)` is all-or-nothing for the move itself:
 
-- refuses before any mutation when a recipe disallows the target, a recipe is missing, or
-  an install-adapter foreign game-dir overwrite lacks `yes` (`Error::NeedConfirm`,
-  `adapter-convert: <dests>`);
+- refuses before any mutation when an enabled instance's recipe disallows the
+  target, an enabled instance's recipe is missing, or an install-adapter
+  foreign game-dir overwrite lacks `yes` (`Error::NeedConfirm`,
+  `adapter-convert: <dests>`). A disabled instance never vetoes: its manifest
+  still follows the choice, and it moves no files;
 - when `slots_chosen` is false and a slot-configurable mod is moving, returns
   `Error::NeedSlotChoice` (`need-slot: <instances>`) before any rename or copy. Touched
   staging on the current claiming dest still refuses first (`StagedModified`). To

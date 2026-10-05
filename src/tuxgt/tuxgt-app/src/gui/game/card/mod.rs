@@ -1,5 +1,8 @@
+mod conflicts;
+
 use std::collections::{HashMap, HashSet};
 
+use gpui_kit::assets::IconName as FullIconName;
 use gpui_kit::component::accordion::Accordion;
 use gpui_kit::component::menu::PopupMenuItem;
 use gpui_kit::component::switch::Switch;
@@ -12,6 +15,7 @@ use tuxgt_core::{FluentArgs, StageState};
 use super::super::theme::{types, TypeStyled as _};
 use super::super::widgets;
 use super::super::{ModRow, Shell};
+use super::{DestConflict, MoveCmd};
 
 impl Shell {
     pub(crate) fn mod_card(
@@ -21,6 +25,7 @@ impl Shell {
         stage: &[&super::StageRow],
         can_up: bool,
         can_down: bool,
+        marks: &[DestConflict],
         view: Entity<Self>,
         cx: &App,
     ) -> impl IntoElement {
@@ -89,7 +94,21 @@ impl Shell {
                                     })
                                     .child(row.label.clone())
                             })
+                            .when(!marks.is_empty(), |this| {
+                                this.child(self.conflict_icon(marks, row.ids.conflict.clone(), cx))
+                            })
                             .child(div().flex_1())
+                            .child(Self::move_button(
+                                row.ids.move_top.clone(),
+                                FullIconName::ArrowUpToLine,
+                                self.strings.get("gui-action-move-top"),
+                                !can_up,
+                                &view,
+                                &game_id,
+                                &inst,
+                                MoveCmd::Top,
+                                cx,
+                            ))
                             .child(Self::move_button(
                                 row.ids.move_up.clone(),
                                 IconName::ArrowUp,
@@ -98,7 +117,7 @@ impl Shell {
                                 &view,
                                 &game_id,
                                 &inst,
-                                -1,
+                                MoveCmd::Step(-1),
                                 cx,
                             ))
                             .child(Self::move_button(
@@ -109,7 +128,18 @@ impl Shell {
                                 &view,
                                 &game_id,
                                 &inst,
-                                1,
+                                MoveCmd::Step(1),
+                                cx,
+                            ))
+                            .child(Self::move_button(
+                                row.ids.move_bottom.clone(),
+                                FullIconName::ArrowDownToLine,
+                                self.strings.get("gui-action-move-bottom"),
+                                !can_down,
+                                &view,
+                                &game_id,
+                                &inst,
+                                MoveCmd::Bottom,
                                 cx,
                             ))
                             .child(widgets::destroy_btn(
@@ -128,6 +158,9 @@ impl Shell {
                                 cx,
                             )),
                     )
+                    .when(marks.iter().any(|m| !m.winning), |this| {
+                        this.child(self.conflict_rows(&game_id, &inst, marks, view.clone(), cx))
+                    })
                     .when(row.installed && row.slot_capable, |this| {
                         let stock = super::super::slot_show::stock_menu_label(&row.file_entries)
                             .unwrap_or_default();
@@ -232,6 +265,7 @@ impl Shell {
                                             &row.file_entries,
                                             &row.env_entries,
                                             &index,
+                                            marks,
                                             view.clone(),
                                             cx,
                                         ))

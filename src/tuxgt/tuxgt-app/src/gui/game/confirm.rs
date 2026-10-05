@@ -601,7 +601,7 @@ pub(crate) fn confirm_dests(msg: &str) -> Vec<String> {
     }
 }
 
-/// Truncated dest label for the Load-conflicts section (60 chars + `…`).
+/// Truncated dest label for conflict rows (60 chars + `…`).
 pub(crate) fn dest_short(dest: &str) -> String {
     const CAP: usize = 60;
     if dest.chars().count() <= CAP {

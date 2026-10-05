@@ -3,13 +3,11 @@ use std::path::Path;
 
 use crate::Result;
 
-use super::{official_mods, official_mods_dir, user_mods_dir, valid_id};
+use super::{official_mods_dir, official_reserved_ids, user_mods_dir, valid_id};
 
 pub(crate) fn official_ids(data_dir: &Path) -> Result<Vec<String>> {
-    Ok(official_mods(&official_mods_dir(data_dir))?
-        .0
+    Ok(official_reserved_ids(&official_mods_dir(data_dir))?
         .into_iter()
-        .map(|i| i.id)
         .collect())
 }
 

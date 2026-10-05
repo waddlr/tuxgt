@@ -2,7 +2,7 @@ use gpui_kit::assets::IconName as FullIconName;
 use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{
-    h_flex, ActiveTheme, Disableable as _, Icon, IconName, Sizable as _, Size,
+    h_flex, ActiveTheme, Disableable as _, Icon, IconName, IconNamed, Sizable as _, Size,
 };
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -35,7 +35,8 @@ pub fn blabel(text: impl Into<SharedString>, cx: &App) -> Div {
 }
 
 /// Control-scale button icon (0.875rem, so it follows `font_scale`).
-pub fn bicon(name: IconName) -> Icon {
+/// Accepts the full Lucide set, not just the component subset.
+pub fn bicon(name: impl IconNamed) -> Icon {
     Icon::new(name).small()
 }
 

@@ -1,18 +1,15 @@
 use std::collections::HashMap;
 
 use super::*;
-use gpui_kit::component::button::ButtonVariants as _;
 use gpui_kit::component::input::Input;
 use gpui_kit::component::{h_flex, v_flex, Sizable as _};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use tuxgt_core::{FluentArgs, LoadConflict};
+use tuxgt_core::LoadConflict;
 
 use super::super::theme::types;
 use super::super::widgets;
-use super::super::{
-    load_conflicts_id, mods_section_id, ModRow, PendingConfirm, SettingsModsTab, Shell,
-};
+use super::super::{mods_section_id, ModRow, PendingConfirm, SettingsModsTab, Shell};
 
 mod residency;
 
@@ -48,22 +45,33 @@ impl Shell {
             .get(game_id)
             .map(|v| &v[..])
             .unwrap_or(&[]);
-        let sections: Vec<(SettingsModsTab, Vec<&ModRow>, Vec<SectionConflict>)> =
-            SettingsModsTab::ALL
-                .iter()
-                .map(|tab| {
-                    let rows: Vec<&ModRow> = section_rows(listed, *tab)
-                        .into_iter()
-                        .filter(|r| Shell::mod_matches_needle(&r.label, &r.instance, &needle))
-                        .collect();
-                    (*tab, rows, section_conflicts(listed, *tab, conflicts))
-                })
-                .collect();
+        let sections: Vec<(SettingsModsTab, Vec<&ModRow>)> = SettingsModsTab::ALL
+            .iter()
+            .map(|tab| {
+                let rows: Vec<&ModRow> = section_rows(listed, *tab)
+                    .into_iter()
+                    .filter(|r| Shell::mod_matches_needle(&r.label, &r.instance, &needle))
+                    .collect();
+                (*tab, rows)
+            })
+            .collect();
+        // Per-installed-card conflict marks, computed once per paint from
+        // the full row set (labels resolve even for filtered-out rivals).
+        let marks: HashMap<&str, Vec<DestConflict>> = listed
+            .iter()
+            .filter(|r| r.installed)
+            .map(|r| {
+                (
+                    r.instance.as_str(),
+                    conflicts_for(listed, conflicts, &r.instance),
+                )
+            })
+            .collect();
         // Uninstall-visible scope: expanded sections only (picker parity — a
         // collapsed section paints its header only). `has_rows` still tracks
         // every filter-passing row so collapsing all sections is not empty.
         let visible_ids: Vec<String> = installed_targets(&sections, &self.installed_collapsed);
-        let has_rows = sections.iter().any(|(_, rows, _)| !rows.is_empty());
+        let has_rows = sections.iter().any(|(_, rows)| !rows.is_empty());
         // Picker open / empty list paints no cards: skip the O(stage) group
         // build entirely on those frames.
         let cards_visible = !self.mods_picker_open && !visible_ids.is_empty();
@@ -174,8 +182,8 @@ impl Shell {
                 this.child(widgets::muted(self.strings.get(empty_key), cx))
             })
             .when(!self.mods_picker_open, |this| {
-                this.children(sections.iter().filter(|(_, rows, _)| !rows.is_empty()).map(
-                    |(tab, rows, groups)| {
+                this.children(sections.iter().filter(|(_, rows)| !rows.is_empty()).map(
+                    |(tab, rows)| {
                         // Clickable header (picker parity): a collapsed section
                         // paints its header only.
                         let collapsed = self.installed_collapsed.contains(tab.pref_id());
@@ -208,95 +216,35 @@ impl Shell {
                         if collapsed {
                             return col.into_any_element();
                         }
-                        col = col
-                            .when_some(
-                                self.conflicts_block(game_id, *tab, groups, view.clone(), cx),
-                                |this, block| this.child(block),
+                        col = col.children(rows.iter().enumerate().map(|(i, row)| {
+                            let stage: &[&super::StageRow] = stage_by_instance
+                                .get(row.instance.as_str())
+                                .map(|v| v.as_slice())
+                                .unwrap_or(&[]);
+                            let marks: &[DestConflict] = marks
+                                .get(row.instance.as_str())
+                                .map(|v| v.as_slice())
+                                .unwrap_or(&[]);
+                            // Officials stay pinned above user rows, so
+                            // that boundary is the one refused swap.
+                            let can_up = i > 0 && rows[i - 1].official == row.official;
+                            let can_down =
+                                i + 1 < rows.len() && rows[i + 1].official == row.official;
+                            self.mod_card(
+                                game_id,
+                                row,
+                                stage,
+                                can_up,
+                                can_down,
+                                marks,
+                                view.clone(),
+                                cx,
                             )
-                            .children(rows.iter().enumerate().map(|(i, row)| {
-                                let stage: &[&super::StageRow] = stage_by_instance
-                                    .get(row.instance.as_str())
-                                    .map(|v| v.as_slice())
-                                    .unwrap_or(&[]);
-                                // Officials stay pinned above user rows, so
-                                // that boundary is the one refused swap.
-                                let can_up = i > 0 && rows[i - 1].official == row.official;
-                                let can_down =
-                                    i + 1 < rows.len() && rows[i + 1].official == row.official;
-                                self.mod_card(
-                                    game_id,
-                                    row,
-                                    stage,
-                                    can_up,
-                                    can_down,
-                                    view.clone(),
-                                    cx,
-                                )
-                            }));
+                        }));
                         col.into_any_element()
                     },
                 ))
             })
             .into_any_element()
-    }
-
-    /// One section's Load-conflicts block: groups whose contenders all sit in
-    /// this section and share officialness (officials are pinned, so a mixed
-    /// group has no reachable winner). `None` paints nothing.
-    pub(crate) fn conflicts_block(
-        &self,
-        game_id: &str,
-        tab: SettingsModsTab,
-        groups: &[SectionConflict],
-        view: Entity<Self>,
-        cx: &App,
-    ) -> Option<AnyElement> {
-        if groups.is_empty() {
-            return None;
-        }
-        Some(
-            v_flex()
-                .id(load_conflicts_id(tab))
-                .gap_1()
-                .child(widgets::muted(
-                    self.strings.get("gui-section-load-conflicts"),
-                    cx,
-                ))
-                .children(groups.iter().enumerate().map(|(gi, c)| {
-                    let winner = c.instances.last().cloned().unwrap_or_default();
-                    let mut wargs = FluentArgs::new();
-                    wargs.set("instance", winner.clone());
-                    let winner_text = self
-                        .strings
-                        .get_args("gui-load-conflict-winner", Some(&wargs));
-                    h_flex()
-                        .gap_2()
-                        .items_center()
-                        .child(widgets::muted(
-                            format!("{} · {winner_text}", dest_short(&c.dest)),
-                            cx,
-                        ))
-                        .children(c.instances.iter().filter(|i| **i != winner).map(|rival| {
-                            let view = view.clone();
-                            let game_id = game_id.to_string();
-                            let rival = rival.clone();
-                            let group = c.instances.clone();
-                            widgets::btn(SharedString::from(format!("make-win-{gi}-{rival}")), cx)
-                                .secondary()
-                                .child(widgets::blabel(self.strings.get("gui-action-make-win"), cx))
-                                .on_click(move |_, _, cx| {
-                                    let view = view.clone();
-                                    let game_id = game_id.clone();
-                                    let rival = rival.clone();
-                                    let group = group.clone();
-                                    view.update(cx, |this, cx| {
-                                        this.make_win_ui(&game_id, &rival, &group, cx);
-                                    });
-                                })
-                        }))
-                        .into_any_element()
-                }))
-                .into_any_element(),
-        )
     }
 }

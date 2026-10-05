@@ -49,7 +49,7 @@ Open bugs are listed in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 **Fix:**
 
 - Install the required instance first. OptiScaler and ReShade are independent; but `reshade_addon`, `effect`, and `texture` types always need a ReShade instance for that game. The app offers **Install required** — accept it, or run `tuxgt instance install <game> reshade`.
-- For slot conflicts (`conflicts: [{ slot: dxgi }]`), use **Slot** on the installed card to pick a different proxy slot (`dxgi`, `d3d9`, `d3d10`, `d3d11`, `d3d12`, `winmm`, `version`) or **Make win** / the move arrows in **Load conflicts** to decide which last wins. The graph diagnostic `tuxgt mods graph` prints `conflicts  ok` / `slot_conflicts` for the fixture set.
+- For slot conflicts (`conflicts: [{ slot: dxgi }]`), use **Slot** on the installed card to pick a different proxy slot (`dxgi`, `d3d9`, `d3d10`, `d3d11`, `d3d12`, `winmm`, `version`) or **Make win** on the losing card / the move arrows to decide which wins. The graph diagnostic `tuxgt mods graph` prints `conflicts  ok` / `slot_conflicts` for the fixture set.
 
 ### 5. Downloads fail or stall
 
