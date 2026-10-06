@@ -53,6 +53,10 @@ pub(crate) fn launch_snap(root: &Path, app: &str, install_dir: Option<&Path>) ->
         .and_then(Value::as_str)
         .map(|s| s.to_string())
         .filter(|s| !s.is_empty());
+    snap.enable_wow64 = settings
+        .get("enableWoW64")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     if let Some(arr) = settings.get("enviromentOptions").and_then(Value::as_array) {
         let mut map = serde_json::Map::new();
         for e in arr {

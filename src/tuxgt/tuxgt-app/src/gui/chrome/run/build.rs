@@ -238,6 +238,7 @@ pub(super) fn build_window(ctx: &Ctx, cx: &mut App) -> Option<LiveWindow> {
                 wrappers: Box::default(),
                 launch_needs: tuxgt_core::LaunchNeeds::default(),
                 launch_cfg: None,
+                wow64_warn: None,
                 appid_stored: None,
                 appid_searching: false,
                 appid_searched: false,

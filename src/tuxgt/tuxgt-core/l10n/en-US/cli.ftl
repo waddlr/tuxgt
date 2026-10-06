@@ -759,3 +759,12 @@ gui-label-hide-minimize = On Minimize
 gui-label-hide-close = On Close
 gui-tray-unavailable = No system tray was found. Hiding is disabled.
 gui-tray-busy = Waiting for the current action to finish.
+
+# gui.wow64-warning: 32-bit WoW64 crash warning row, one string per source.
+gui-wow64-heroic-toggle = 32-bit game + WoW64 will crash on launch. Turn off Enable WoW64 in Heroic → game → Settings → Wine.
+gui-wow64-heroic-env = 32-bit game + WoW64 will crash on launch. Remove PROTON_USE_WOW64 from this game's Heroic environment variables.
+gui-wow64-steam-options = 32-bit game + WoW64 will crash on launch. Remove PROTON_USE_WOW64=1 from Steam → game → Properties → Launch Options.
+gui-wow64-knob = 32-bit game + WoW64 will crash on launch. Turn off the proton-wow64 knob on this game's Environment tab.
+gui-wow64-custom = 32-bit game + WoW64 will crash on launch. Remove PROTON_USE_WOW64 from this game's Environment → Custom.
+gui-wow64-global = 32-bit game + WoW64 will crash on launch. Turn off the proton-wow64 knob in Settings → Game Env.
+gui-wow64-process = 32-bit game + WoW64 will crash on launch. Unset PROTON_USE_WOW64 where TuxGT was launched from.

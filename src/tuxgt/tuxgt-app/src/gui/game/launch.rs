@@ -822,6 +822,7 @@ impl Shell {
                 self.strings.get("gui-section-launch-mode"),
                 cx,
             ))
+            .child(self.wow64_row(cx))
             .child(self.adapter_choice_row(view.clone(), cx))
             .when(self.is_client_game(&game_id), |this| {
                 this.when(current.show_hook_apply(needs.show_radio()), |this| {

@@ -34,6 +34,7 @@ mod rows;
 mod slot_choice;
 mod slot_picks;
 mod uninstall;
+mod wow64;
 mod wrappers;
 
 pub(crate) use confirm::*;

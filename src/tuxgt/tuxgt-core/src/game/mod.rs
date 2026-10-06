@@ -5,6 +5,7 @@ mod index;
 mod manual;
 mod migrate;
 mod row;
+mod wow64;
 
 pub(crate) use id::*;
 pub(crate) use index::*;
@@ -23,6 +24,7 @@ pub use manual::{
     add_manual, add_manual_full, existing_path, id8, id8_prefixed, remove_manual, touch_last_played,
 };
 pub use row::{GameIndexRow, GameRow};
+pub use wow64::{should_warn_wow64, wow64_warn, Wow64Source, Wow64Sources, WOW64_VAR};
 
 #[cfg(test)]
 mod testing;
@@ -32,3 +34,5 @@ mod tests_0;
 mod tests_1;
 #[cfg(test)]
 mod tests_2;
+#[cfg(test)]
+mod tests_wow64;

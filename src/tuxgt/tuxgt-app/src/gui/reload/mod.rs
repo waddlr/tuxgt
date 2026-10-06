@@ -143,6 +143,7 @@ impl Shell {
         let Some(id) = self.selected.clone() else {
             self.wrappers = Default::default();
             self.launch_cfg = None;
+            self.wow64_warn = None;
             self.about_env_scroll = ScrollHandle::new();
             return;
         };
@@ -158,10 +159,11 @@ impl Shell {
                     return;
                 }
                 match result {
-                    Ok((wrappers, needs, cfg)) => {
+                    Ok((wrappers, needs, cfg, wow64)) => {
                         this.wrappers = wrappers.into_boxed_slice();
                         this.launch_needs = needs;
                         this.launch_cfg = Some(cfg);
+                        this.wow64_warn = wow64;
                     }
                     Err(e) if post_op => {
                         this.pending_note = Some(Note::Err(format!("{e}")));
@@ -352,6 +354,7 @@ async fn fetch_launch_state(
         Vec<String>,
         tuxgt_core::LaunchNeeds,
         tuxgt_core::GameLaunchConfig,
+        Option<tuxgt_core::Wow64Source>,
     ),
     tuxgt_core::Error,
 > {
@@ -404,5 +407,9 @@ async fn fetch_launch_state(
             }
         }
     }
-    Ok((wrappers, needs, cfg))
+    // Host failure must not fail the launch-state load: `None` only skips
+    // the plugin-disabled filter, failing safe toward warning.
+    let host = tuxgt_core::PluginHost::load().ok();
+    let wow64 = tuxgt_core::wow64_warn(&pool, game_id, host.as_ref()).await?;
+    Ok((wrappers, needs, cfg, wow64))
 }

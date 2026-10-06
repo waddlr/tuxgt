@@ -146,6 +146,9 @@ pub struct Shell {
     /// Cached store launch config for the selected game (About read-only
     /// reference). Loaded with `wrappers`.
     pub(crate) launch_cfg: Option<tuxgt_core::GameLaunchConfig>,
+    /// Active WoW64 channel for the selected 32-bit game, if any
+    /// (`gui.wow64-warning`). Loaded with `wrappers`.
+    pub(crate) wow64_warn: Option<tuxgt_core::Wow64Source>,
     /// E63: family templates for the Settings Mods Add flow, loaded on
     /// Settings Mods-tab entry and refreshed by Re-sync official.
     pub(crate) family_templates: Box<[tuxgt_core::ModTemplate]>,

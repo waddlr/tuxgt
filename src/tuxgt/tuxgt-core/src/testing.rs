@@ -28,6 +28,7 @@ pub(crate) struct SeedGame<'a> {
     pub override_exe_path: Option<&'a str>,
     pub override_api: Option<&'a str>,
     pub override_platform: Option<&'a str>,
+    pub override_bitness: Option<&'a str>,
     pub detected_hidden: Option<i64>,
     pub override_hidden: Option<i64>,
     pub last_played: Option<i64>,
@@ -38,8 +39,8 @@ pub(crate) async fn seed_game(pool: &SqlitePool, g: SeedGame<'_>) {
         "INSERT INTO games (id, manager, store, game_id, name, install_dir, exe_path, prefix_path,
          proton, launch_options, env, wrapper, detected_exe_path, detected_platform, detected_api,
          detected_bitness, detected_proton, override_exe_path, override_api, override_platform,
-         detected_hidden, override_hidden, last_played)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         override_bitness, detected_hidden, override_hidden, last_played)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(g.id)
     .bind(g.manager)
@@ -61,6 +62,7 @@ pub(crate) async fn seed_game(pool: &SqlitePool, g: SeedGame<'_>) {
     .bind(g.override_exe_path)
     .bind(g.override_api)
     .bind(g.override_platform)
+    .bind(g.override_bitness)
     .bind(g.detected_hidden)
     .bind(g.override_hidden)
     .bind(g.last_played)

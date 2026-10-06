@@ -46,6 +46,9 @@ pub struct StoreSnap {
     pub env: Option<String>,
     pub wrapper: Option<String>,
     pub wine_type: Option<String>,
+    /// Heroic per-game `enableWoW64` toggle. Only `launch_snap` sets it;
+    /// every other snapshot leaves the default false.
+    pub enable_wow64: bool,
 }
 
 impl GameRecord {

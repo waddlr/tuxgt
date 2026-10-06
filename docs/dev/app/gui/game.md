@@ -163,6 +163,27 @@ core has disarmed, so a deferred Apply is not an unselected Not hooked with
 Hook/Apply hidden. Like a manual Restore the store client still needs its
 restart for that to take (a running Heroic gets the same restart notice).
 
+### WoW64 warning (`gui.wow64-warning`)
+
+Warn-only row in the Launch Mode card, first child after the section
+title, warning ink. Paints for every row (like the adapter row) when the
+selected game is 32-bit (`GameRow.bitness == "32"`, the
+`COALESCE(NULLIF(override_bitness,''), detected_bitness)` resolution)
+and any WoW64 source is on. Unknown or empty bitness stays silent;
+64-bit rows never warn. No control flips anything; the copy names the
+toggle and where to turn it off.
+
+On means `PROTON_USE_WOW64` trimmed equals `1` (env maps, Heroic env
+options, own process env), the exact whitespace-delimited
+`PROTON_USE_WOW64=1` token (Steam LaunchOptions text), or Heroic
+`GamesConfig/<app>.json` `enableWoW64 == true`. Channels are OR'd: a
+later merge layer unsetting the var does not clear the warning. First
+match in this order names the copy: Heroic toggle, Heroic env, Steam
+LaunchOptions, per-game proton-wow64 knob, per-game custom env, global
+env, process env. Heroic sources apply only to heroic rows, Steam
+options only to steam rows. Env inherited from a running store client
+process is not visible and is out of scope.
+
 ### Extra wrappers
 
 GameMode, gamescope, MangoHud. Label = product name. Help = tooltip only.
