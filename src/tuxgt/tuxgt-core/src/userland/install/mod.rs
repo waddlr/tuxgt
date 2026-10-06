@@ -1,12 +1,13 @@
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 mod overlay;
+mod stale;
 
 use super::*;
-use crate::{Error, Result};
+use crate::{app_version, Error, Result};
 
 pub(crate) use overlay::*;
+pub(crate) use stale::*;
 
 /// `rename(2)` cross-device error (Linux value; no libc dep for one constant).
 pub(crate) const EXDEV: i32 = 18;
@@ -38,6 +39,11 @@ pub struct InstallReport {
     /// no longer matches the old inventory (user replaced it), or the
     /// path sits under PREFIX (never delete the tree, `games/`, `config/`).
     pub stale_skipped: Box<[PathBuf]>,
+    /// Previous-manifest PREFIX files no longer shipped, removed from the
+    /// live prefix (relative paths; a dropped official payload dir reports
+    /// as `mods/official/<id>/`). Empty when the previous manifest is
+    /// missing (legacy install) or the tree is partial.
+    pub prefix_removed: Box<[String]>,
     /// Protonfixes `localfixes` files written (native, plus Heroic Flatpak
     /// when that tree exists).
     pub hooks: Box<[PathBuf]>,
@@ -210,7 +216,7 @@ pub fn install_userland_with_home(
     } else if dest.join("bin/tuxgt").is_file() {
         // Reinstall over an existing prefix (issue #1): overlay this
         // tree's program files, never silently keep the stale tree.
-        let overlaid = overlay_prefix_tree(&src_canon, &dest_canon)?;
+        let overlaid = overlay_prefix_tree(&src_canon, &dest_canon)?.len();
         (dest_canon, false, false, overlaid)
     } else {
         return Err(Error::Install(format!(
@@ -290,6 +296,16 @@ pub fn install_userland_with_home(
             wrapped.push(lf);
         }
     }
+    // The new owned set comes from the source tree on overlay (dest still
+    // holds stale files that must not be adopted); every other path settled
+    // on the live prefix itself.
+    let manifest_tree = if !moved && !in_place && src_canon != prefix {
+        src_canon.clone()
+    } else {
+        prefix.clone()
+    };
+    let prefix_removed =
+        reconcile_prefix_manifest(&manifest_tree, &prefix, &format!("v{}", app_version()))?;
     save_host_inventory(
         &prefix,
         &host_inventory_from_intended(&prefix, &intended, &wrapped),
@@ -313,67 +329,10 @@ pub fn install_userland_with_home(
         desktop_link,
         stale_removed,
         stale_skipped,
+        prefix_removed,
         hooks,
         icons: (icon_ok, ICON_SIZES.len()),
     })
-}
-
-/// Remove previous-inventory paths that are no longer intended, when we
-/// still own them: our symlink target, old-inventory file sha256, or the
-/// hook marker. Returns `(removed, skipped)`. Missing paths are already
-/// gone (neither). Paths under PREFIX are never deleted (`games/`,
-/// `config/`, the tree itself) — they land in `skipped`. Only files and
-/// symlinks are ever removed; directories are left alone.
-pub(crate) fn remove_stale_owned(
-    prefix: &Path,
-    intended: &[IntendedHostEntry],
-    previous: &HostInstallInventory,
-) -> (Box<[PathBuf]>, Box<[PathBuf]>) {
-    let intended_set: HashSet<&Path> = intended.iter().map(|e| e.path.as_path()).collect();
-    let (mut removed, mut skipped): (Vec<PathBuf>, Vec<PathBuf>) = (Vec::new(), Vec::new());
-    for old in &previous.paths {
-        if intended_set.contains(old.path.as_path()) {
-            continue;
-        }
-        if old.path.starts_with(prefix) {
-            skipped.push(old.path.clone());
-            continue;
-        }
-        let owned = match old.kind {
-            HostKind::Symlink => match std::fs::read_link(&old.path) {
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-                Err(_) => Some(false),
-                Ok(target) => Some(target == old.target.clone().unwrap_or_default()),
-            },
-            HostKind::File => match std::fs::read(&old.path) {
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-                Err(_) => Some(false),
-                Ok(bytes) => {
-                    if Some(sha256_hex_bytes(&bytes)) == old.sha256 {
-                        Some(true)
-                    } else {
-                        // Ours-marker hook file still owned even when the
-                        // bytes drifted from the recorded hash.
-                        Some(std::str::from_utf8(&bytes).map(is_ours).unwrap_or(false))
-                    }
-                }
-            },
-        };
-        match owned {
-            None => {}
-            Some(true) => {
-                if std::fs::remove_file(&old.path).is_ok() {
-                    removed.push(old.path.clone());
-                } else {
-                    // Vanished or turned into a dir between check and
-                    // remove: leave it, report as skipped.
-                    skipped.push(old.path.clone());
-                }
-            }
-            Some(false) => skipped.push(old.path.clone()),
-        }
-    }
-    (removed.into_boxed_slice(), skipped.into_boxed_slice())
 }
 
 pub(crate) const HOOK_MARKER: &str = "tuxgt-proton-hook v1";

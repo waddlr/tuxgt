@@ -34,3 +34,5 @@ mod tests_0;
 mod tests_1;
 #[cfg(test)]
 mod tests_2;
+#[cfg(test)]
+mod tests_3;

@@ -1,8 +1,12 @@
 //! Deploy-parity prefix overlay for `tuxgt install` over an existing prefix.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::{Error, Result};
+use crate::update::{
+    load_prefix_manifest, remove_stale, save_prefix_manifest, PrefixFile, PrefixManifest,
+};
+use crate::{sha256_file, Error, Result};
 
 /// Owned PREFIX roots mirrored from the source tree (`make deploy` parity).
 const OWNED_ROOTS: [&str; 4] = ["bin/", "lib/", "share/", "mods/official/"];
@@ -11,22 +15,15 @@ const OWNED_ROOTS: [&str; 4] = ["bin/", "lib/", "share/", "mods/official/"];
 const DESKTOP: &str = "share/applications/tuxgt.desktop";
 
 /// Copy the packaged program set from the unpacked source tree over the
-/// live prefix and return the overlaid file count: every regular file
-/// under the owned roots (symlinks and other kinds skipped, never
-/// followed), tmp + rename per file, package modes (`755` `bin/*` +
-/// `lib/*.so`, `644` the rest). Dest official TOMLs missing from a
-/// present source `mods/official/` drop with their payload dirs. Never
-/// touches `games/`, `downloads/`, `config/`, `mods/user/`, registries,
-/// or kept official payloads.
-pub(crate) fn overlay_prefix_tree(src: &Path, dest: &Path) -> Result<usize> {
-    let mut files = Vec::new();
-    for root in OWNED_ROOTS {
-        // `mods/official/` carries top-level recipe TOMLs only (tarball
-        // layout); anything deeper is a payload dir, never source material.
-        let official = root == "mods/official/";
-        collect_owned(src, root, !official, official, &mut files)?;
-    }
-    files.sort();
+/// live prefix and return the overlaid rels: every regular file under the
+/// owned roots (symlinks and other kinds skipped, never followed), tmp +
+/// rename per file, package modes (`755` `bin/*` + `lib/*.so`, `644` the
+/// rest). Dest official TOMLs missing from a present source
+/// `mods/official/` drop with their payload dirs. Never touches `games/`,
+/// `downloads/`, `config/`, `mods/user/`, registries, or kept official
+/// payloads.
+pub(crate) fn overlay_prefix_tree(src: &Path, dest: &Path) -> Result<Vec<String>> {
+    let files = owned_rels(src)?;
     for rel in &files {
         let target = dest.join(rel);
         if let Some(parent) = target.parent() {
@@ -36,7 +33,76 @@ pub(crate) fn overlay_prefix_tree(src: &Path, dest: &Path) -> Result<usize> {
         set_package_mode(&target, rel)?;
     }
     drop_gone_officials(src, dest)?;
-    Ok(files.len())
+    Ok(files)
+}
+
+/// Owned relative paths (`/` separators) of one tree with install rules:
+/// `bin/`/`lib/`/`share/` deep (minus the rewritten desktop entry),
+/// `mods/official/` top-level TOMLs only (tarball layout; anything deeper
+/// is a payload dir, never source material — so a same-tree run can never
+/// adopt payload files a later update would delete).
+pub(crate) fn owned_rels(tree: &Path) -> Result<Vec<String>> {
+    let mut files = Vec::new();
+    for root in OWNED_ROOTS {
+        let official = root == "mods/official/";
+        collect_owned(tree, root, !official, official, &mut files)?;
+    }
+    files.sort();
+    Ok(files)
+}
+
+/// Settle `$PREFIX/config/prefix-manifest.toml` after an install and drop
+/// previous-owned files the new set no longer ships (update parity: same
+/// manifest file, same `remove_stale`). `set_tree` is the unpacked source
+/// tree on overlay, else the live prefix itself; bytes are always hashed
+/// from the live prefix (landed bytes). The rewritten desktop entry tracks
+/// dest bytes when present, like update's kept entry. No `bin/tuxgt` in the
+/// new set means a partial tree: intent unknown, drop nothing, save nothing
+/// (`drop_gone_officials` parity). Returns removed relative paths.
+pub(crate) fn reconcile_prefix_manifest(
+    set_tree: &Path,
+    prefix: &Path,
+    tag: &str,
+) -> Result<Box<[String]>> {
+    let rels = owned_rels(set_tree)?;
+    if !rels.iter().any(|r| r == "bin/tuxgt") {
+        return Ok(Box::default());
+    }
+    let previous = load_prefix_manifest(prefix).map_err(to_install_err)?;
+    let mut rows = Vec::with_capacity(rels.len() + 1);
+    for rel in &rels {
+        rows.push(PrefixFile {
+            path: rel.clone(),
+            sha256: sha256_file(&prefix.join(rel))?,
+        });
+    }
+    if prefix.join(DESKTOP).is_file() {
+        rows.push(PrefixFile {
+            path: DESKTOP.into(),
+            sha256: sha256_file(&prefix.join(DESKTOP))?,
+        });
+    }
+    rows.sort_by(|a, b| a.path.cmp(&b.path));
+    let new_set: HashSet<String> = rows.iter().map(|r| r.path.clone()).collect();
+    let removed = remove_stale(prefix, previous.as_ref(), &new_set, Error::Install)?;
+    save_prefix_manifest(
+        prefix,
+        &PrefixManifest {
+            tag: tag.into(),
+            files: rows,
+        },
+    )
+    .map_err(to_install_err)?;
+    Ok(removed)
+}
+
+/// `load/save_prefix_manifest` speak `Error::Update`; on the install path
+/// a corrupt manifest must fail as install, not update.
+fn to_install_err(e: Error) -> Error {
+    match e {
+        Error::Update(msg) => Error::Install(msg),
+        other => other,
+    }
 }
 
 /// Sorted-then-collected owned relative paths (`/` separators) under one

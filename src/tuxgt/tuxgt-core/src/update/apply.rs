@@ -107,7 +107,7 @@ fn apply_unpacked(
         updated += 1;
     }
     let new_set: HashSet<String> = owned.into_iter().map(|(rel, _)| rel).collect();
-    let removed = remove_stale(prefix, previous.as_ref(), &new_set)?;
+    let removed = remove_stale(prefix, previous.as_ref(), &new_set, Error::Update)?;
     save_prefix_manifest(
         prefix,
         &PrefixManifest {
@@ -225,10 +225,13 @@ fn set_package_mode(dest: &Path, rel: &str) -> Result<()> {
 /// payload dir (deploy parity). No previous manifest skips the pass. A
 /// removal that fails for any reason other than already-gone errors loudly
 /// (the manifest is saved after this, so a re-run retries cleanly).
-fn remove_stale(
+/// Shared with install (`reconcile_prefix_manifest`); `err` maps failures
+/// to the caller's domain.
+pub(crate) fn remove_stale(
     prefix: &Path,
     previous: Option<&PrefixManifest>,
     owned: &HashSet<String>,
+    err: impl Fn(String) -> Error,
 ) -> Result<Box<[String]>> {
     let Some(prev) = previous else {
         return Ok(Box::default());
@@ -241,12 +244,7 @@ fn remove_stale(
         match std::fs::remove_file(prefix.join(&f.path)) {
             Ok(()) => removed.push(f.path.clone()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => {
-                return Err(Error::Update(format!(
-                    "cannot remove stale {}: {e}",
-                    f.path
-                )))
-            }
+            Err(e) => return Err(err(format!("cannot remove stale {}: {e}", f.path))),
         }
         if let Some(id) = f
             .path
@@ -259,7 +257,7 @@ fn remove_stale(
                     Ok(()) => removed.push(format!("mods/official/{id}/")),
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                     Err(e) => {
-                        return Err(Error::Update(format!(
+                        return Err(err(format!(
                             "cannot remove dropped payload mods/official/{id}/: {e}"
                         )))
                     }
