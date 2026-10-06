@@ -71,7 +71,7 @@ async fn apply_refuses_symlinks_and_unowned_paths() {
 }
 
 #[tokio::test]
-async fn apply_without_manifest_skips_the_stale_pass() {
+async fn apply_without_manifest_keeps_non_official_stale() {
     let root = tmp_root("legacy");
     let prefix = root.join("prefix");
     let sentinel = root.join("host-refresh.log");

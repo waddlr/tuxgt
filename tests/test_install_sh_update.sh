@@ -4,7 +4,7 @@
 # serve a local staged release over file://, run install.sh with no tty,
 # and prove the new tree lands (binary hash, drop-gone) with user data
 # intact. The stale bin/tuxgt is deliberately un-runnable: passing proves
-# the update never executes the installed tree (SIGILL recovery).
+# the update never executes the old installed bytes (SIGILL recovery).
 #
 # Hermetic: temp HOME, temp prefix, file:// release URL — never the real
 # HOME, never network GitHub (TUXGT_LATEST pins the version lookup).
@@ -70,7 +70,8 @@ printf 'mine\n' > "$work/exp-mine"
 
 t "exit 0" test "$rc" -eq 0
 t "version guard takes update" grep -q "Latest is v9.9.9" "$out"
-t "staged-tree install ran (overlaid line)" grep -q "overlaid" "$out"
+t "staged-tree update ran (updated line)" grep -q "^updated" "$out"
+t "manifest records the tag" grep -q "9.9.9" "$dest/config/prefix-manifest.toml"
 t "new binary lands" cmp "$dest/bin/tuxgt" "$pkg/bin/tuxgt"
 t "lib refreshed" cmp "$dest/lib/libtuxgt-launcher.so" "$pkg/lib/libtuxgt-launcher.so"
 t "share refreshed" cmp "$dest/share/templates/custom-blank.toml" "$pkg/share/templates/custom-blank.toml"

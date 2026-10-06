@@ -133,9 +133,9 @@ pub use stage::{
     staged_shas, sync_staging, StageInput, StageLine, StageState,
 };
 pub use update::{
-    app_version, apply_app_update, check_app_update, load_prefix_manifest, parse_app_version,
-    save_prefix_manifest, AppUpdateReport, AppUpdateStatus, AppVersion, PrefixFile, PrefixManifest,
-    UPDATE_ASSET, UPDATE_OWNER, UPDATE_REPO,
+    app_version, apply_app_update, apply_local_update, check_app_update, load_prefix_manifest,
+    parse_app_version, save_prefix_manifest, AppUpdateReport, AppUpdateStatus, AppVersion,
+    PrefixFile, PrefixManifest, UPDATE_ASSET, UPDATE_OWNER, UPDATE_REPO,
 };
 pub use userland::{
     collapse_icon_paths, expand_tilde, host_inventory_from_intended, icons_check_line,

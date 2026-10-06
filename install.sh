@@ -236,7 +236,8 @@ if [ "$need_fetch" -eq 1 ]; then
 
     say "Unpacking …"
     tar -xzf "$stage/$ASSET" -C "$stage"
-    rm -f "$stage/$ASSET"
+    # The asset stays: the update path below feeds it to the staged
+    # binary's `update --from`.
     src="$stage/tuxgt"
     [ -x "$src/bin/tuxgt" ] || { echo "error: $src/bin/tuxgt missing from $ASSET" >&2; exit 1; }
 
@@ -246,10 +247,18 @@ if [ "$need_fetch" -eq 1 ]; then
             rm -rf "$src"
         fi
     else
-        # Update: the staged tree's own binary overlays the prefix
+        # Update: the staged tree's own binary applies the tarball
         # (per-file atomic, drop-gone officials) and refreshes host
-        # files. Never executes the installed tree (SIGILL recovery).
-        "$src/bin/tuxgt" install --prefix "$dest" --yes
+        # files. Never executes the old installed bytes (SIGILL recovery).
+        upd_tag="${latest:-}"
+        if ! norm_ver "$upd_tag" >/dev/null 2>&1; then
+            upd_tag="$(installed_ver "$src/bin/tuxgt" || true)"
+        fi
+        if ! norm_ver "$upd_tag" >/dev/null 2>&1; then
+            echo "error: cannot determine the release tag for update --from" >&2
+            exit 1
+        fi
+        "$src/bin/tuxgt" update --from "$stage/$ASSET" --tag "v$upd_tag" --prefix "$dest" --yes
         installed=1
     fi
 fi

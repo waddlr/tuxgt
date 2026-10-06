@@ -7,7 +7,7 @@ mod manifest;
 mod version;
 
 pub(crate) use apply::remove_stale;
-pub use apply::{apply_app_update, AppUpdateReport};
+pub use apply::{apply_app_update, apply_local_update, AppUpdateReport};
 pub use check::{app_version, check_app_update, AppUpdateStatus};
 pub use manifest::{load_prefix_manifest, save_prefix_manifest, PrefixFile, PrefixManifest};
 pub use version::{parse_app_version, AppVersion};
@@ -22,3 +22,5 @@ pub const UPDATE_ASSET: &str = "tuxgt.tar.gz";
 mod tests_0;
 #[cfg(test)]
 mod tests_1;
+#[cfg(test)]
+mod tests_2;

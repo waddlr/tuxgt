@@ -141,6 +141,8 @@ on a tty (`--yes` skips; no tty without `--yes` refuses) and applies.
 Tags compare as `vX.Y.Z` with optional `-beta.N` (final beats beta);
 an unparseable tag or a release without the asset is `unknown`, never
 an error that blocks the app. The update path never opens the DB.
+`--prefix` pins the target prefix in both modes (default: boot data
+dir).
 
 Apply order: fetch the asset into `downloads/` (forced re-fetch) →
 unpack to a dot-prefixed dir under `downloads/` (removed afterwards)
@@ -158,11 +160,20 @@ rows) → re-exec host refresh as the NEW binary
 (`$PREFIX/bin/tuxgt install --prefix $PREFIX --yes`, pinned so the live
 prefix never moves to `~/tuxgt`), so baked hook text comes from the new
 build → drop the spent download entry. No previous manifest
-(legacy install) skips the stale pass, like the host inventory.
-`games/`, `downloads/` (at rest), `config/` (except the manifest
-itself), `mods/user/`, registries, and kept official payloads are
-never touched. A failed host refresh errors loudly (the prefix is
-already new; re-run `tuxgt install`). GUI apply drops the `app:<tag>`
+(legacy install) skips the manifest stale pass, like the host
+inventory — but the official-recipe tree comparison still runs: dest
+`mods/official/*.toml` files missing from the new tree drop with
+their payload dirs (`install` parity). `games/`, `downloads/` (at
+rest), `config/` (except the manifest itself), `mods/user/`,
+registries, and kept official payloads are never touched. A failed
+host refresh errors loudly (the prefix is already new; re-run
+`tuxgt install`). Local mode, `tuxgt update --from <tarball> --tag
+<tag>`: skips the version check and the fetch and applies a local
+file through the same unpack → overlay → manifest → host-refresh
+order (same confirm rules; `--from` needs `--tag`, refuses
+`--check`). `install.sh` keeps its own curl/wget fetch and updates
+via the staged binary's `update --from`, so it never executes the
+old installed bytes. GUI apply drops the `app:<tag>`
 Attention card as soon as Update is clicked (action taken), opens a
 Live card for fetch progress with Cancel (About morphs to Cancel too),
 and restores `Available` plus the Attention card on cancel or failure.

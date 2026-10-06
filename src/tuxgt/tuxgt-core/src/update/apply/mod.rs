@@ -1,10 +1,15 @@
 //! Apply one self-update: fetch the release tarball, overlay the owned
 //! PREFIX set, refresh host files from the new binary. Never opens the DB.
 
+mod stale;
+
 use std::collections::HashSet;
 use std::path::Path;
 
+pub(crate) use stale::remove_stale;
+
 use super::manifest::{load_prefix_manifest, save_prefix_manifest, PrefixFile, PrefixManifest};
+use super::parse_app_version;
 use crate::download::{
     cancelled, drop_download, fetch_url, sha256_file, unpack, CancelFlag, ProgressSink,
 };
@@ -65,6 +70,35 @@ pub async fn apply_app_update(
     let out = apply_unpacked(prefix, tag, &asset.file, &scratch);
     let _ = std::fs::remove_dir_all(&scratch);
     drop_download(prefix, &asset.key);
+    out
+}
+
+/// Apply a local release tarball: the same owned-overlay machinery as
+/// [`apply_app_update`], minus the fetch and the version check.
+/// `tuxgt update --from` (and `install.sh`, which keeps its own fetch).
+pub fn apply_local_update(prefix: &Path, tag: &str, asset: &Path) -> Result<AppUpdateReport> {
+    if !prefix.join("bin/tuxgt").is_file() {
+        return Err(Error::Update(format!(
+            "not an installed prefix: {}; run `tuxgt install` first",
+            prefix.display()
+        )));
+    }
+    if parse_app_version(tag).is_none() {
+        return Err(Error::Update(format!("cannot parse release tag: {tag}")));
+    }
+    if !asset.is_file() {
+        return Err(Error::Update(format!(
+            "no such tarball: {}",
+            asset.display()
+        )));
+    }
+    let scratch = prefix
+        .join("downloads")
+        .join(format!(".update-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch)?;
+    let out = apply_unpacked(prefix, tag, asset, &scratch);
+    let _ = std::fs::remove_dir_all(&scratch);
     out
 }
 
@@ -218,54 +252,6 @@ fn set_package_mode(dest: &Path, rel: &str) -> Result<()> {
     #[cfg(not(unix))]
     let _ = (dest, rel);
     Ok(())
-}
-
-/// Drop previous-owned files missing from the new set. Paths outside the
-/// owned roots are never deleted; a dropped official recipe also drops its
-/// payload dir (deploy parity). No previous manifest skips the pass. A
-/// removal that fails for any reason other than already-gone errors loudly
-/// (the manifest is saved after this, so a re-run retries cleanly).
-/// Shared with install (`reconcile_prefix_manifest`); `err` maps failures
-/// to the caller's domain.
-pub(crate) fn remove_stale(
-    prefix: &Path,
-    previous: Option<&PrefixManifest>,
-    owned: &HashSet<String>,
-    err: impl Fn(String) -> Error,
-) -> Result<Box<[String]>> {
-    let Some(prev) = previous else {
-        return Ok(Box::default());
-    };
-    let mut removed = Vec::new();
-    for f in &prev.files {
-        if owned.contains(&f.path) || !is_owned(&f.path) {
-            continue;
-        }
-        match std::fs::remove_file(prefix.join(&f.path)) {
-            Ok(()) => removed.push(f.path.clone()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(err(format!("cannot remove stale {}: {e}", f.path))),
-        }
-        if let Some(id) = f
-            .path
-            .strip_prefix("mods/official/")
-            .and_then(|s| s.strip_suffix(".toml"))
-        {
-            if !id.contains('/') {
-                let dir = prefix.join("mods/official").join(id);
-                match std::fs::remove_dir_all(&dir) {
-                    Ok(()) => removed.push(format!("mods/official/{id}/")),
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => {
-                        return Err(err(format!(
-                            "cannot remove dropped payload mods/official/{id}/: {e}"
-                        )))
-                    }
-                }
-            }
-        }
-    }
-    Ok(removed.into_boxed_slice())
 }
 
 /// Host refresh as the NEW binary, so baked hook text comes from the new

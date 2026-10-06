@@ -149,6 +149,20 @@ pub(crate) enum Cmd {
         /// Apply without a prompt
         #[arg(long, short = 'y')]
         yes: bool,
+        /// Apply a local release tarball instead of fetching (needs --tag)
+        #[arg(
+            long,
+            value_name = "TARBALL",
+            requires = "tag",
+            conflicts_with = "check"
+        )]
+        from: Option<PathBuf>,
+        /// Release tag the --from tarball came from
+        #[arg(long, value_name = "TAG", requires = "from")]
+        tag: Option<String>,
+        /// Prefix to update (default: boot data dir)
+        #[arg(long)]
+        prefix: Option<PathBuf>,
     },
 }
 
