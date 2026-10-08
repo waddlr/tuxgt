@@ -5,9 +5,10 @@ use std::path::{Path, PathBuf};
 
 use crate::{Error, Result};
 
+use super::catalog::{read_disabled, write_disabled};
 use super::{
-    check_requires_known, list_mods, local_abs, official_ids, parse_recipe, recipe_path,
-    user_mods_dir, write_user_recipe, Mod, SourceRef,
+    check_requires_known, clear_bulk_disabled, list_mods, local_abs, official_ids, parse_recipe,
+    recipe_path, user_mods_dir, write_user_recipe, Mod, SourceRef,
 };
 
 /// Unpack archive `src` into `dest` via a temp dir that is deleted on
@@ -173,6 +174,12 @@ pub fn remove_mod(config_dir: &Path, data_dir: &Path, id: &str) -> Result<()> {
         fs::remove_file(&dest)?;
     }
     let _ = fs::remove_dir_all(payload_dir(data_dir, false, inst.registry.as_deref(), id));
+    // A removed-then-readded id must not inherit stale catalog state.
+    clear_bulk_disabled(config_dir, id)?;
+    let mut disabled = read_disabled(config_dir)?;
+    if disabled.remove(id) {
+        write_disabled(config_dir, &disabled)?;
+    }
     crate::db::mark_cache_dirty();
     Ok(())
 }

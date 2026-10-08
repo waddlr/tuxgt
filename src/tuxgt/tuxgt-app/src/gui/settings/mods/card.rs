@@ -125,10 +125,14 @@ impl Shell {
                                         this.child(widgets::destroy_btn(
                                             i.ids.remove.clone(),
                                             self.strings.get("gui-action-remove"),
-                                            move |_, _, cx| {
+                                            move |_, window, cx| {
                                                 cx.stop_propagation();
                                                 remove_view.update(cx, |this, cx| {
-                                                    this.remove_instance_ui(remove_id.clone(), cx);
+                                                    this.confirm_remove_instance_ui(
+                                                        remove_id.clone(),
+                                                        window,
+                                                        cx,
+                                                    );
                                                 });
                                             },
                                             cx,

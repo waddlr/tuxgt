@@ -1,4 +1,5 @@
 mod add;
+mod bulk;
 mod catalog;
 mod export;
 mod from;
@@ -29,6 +30,9 @@ pub(crate) use testing::seed_official_share_from_repo;
 pub(crate) use write::*;
 
 pub use add::{add_mod, add_mod_with_password, remove_mod};
+pub use bulk::{
+    clear_bulk_disabled, read_bulk_disabled, record_bulk_disabled, unrecord_bulk_games,
+};
 pub use catalog::{
     disable_mod, enable_mod, list_mods, mods_for_game, set_mod_offered, ModList, ModProblem,
 };
@@ -49,6 +53,8 @@ pub use templates::{list_templates, ModTemplate, TemplateFamily};
 
 #[cfg(test)]
 mod testing;
+#[cfg(test)]
+mod tests_bulk;
 #[cfg(test)]
 mod tests_catalog;
 #[cfg(test)]

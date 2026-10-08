@@ -114,10 +114,10 @@ impl Shell {
         Switch::new(i.ids.enable.clone())
             .checked(i.enabled)
             .xsmall()
-            .on_click(move |on, _, cx| {
+            .on_click(move |on, window, cx| {
                 let on = *on;
                 view.update(cx, |this, cx| {
-                    this.set_instance_offered_ui(id.clone(), on, cx);
+                    this.set_instance_offered_ui(id.clone(), on, window, cx);
                 });
             })
     }

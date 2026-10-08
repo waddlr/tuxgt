@@ -12,6 +12,7 @@ mod park;
 mod preview;
 mod provide;
 mod repair;
+mod scope;
 mod slot;
 mod uninstall;
 mod update;
@@ -39,6 +40,10 @@ pub use preview::{effect_names_for, payload_has_files, payload_provenance, previ
 pub use provide::{
     clear_provided_files, provide_files, provide_files_with_password, provided_files,
     ProvideReport, ProvidedFiles,
+};
+pub use scope::{
+    install_scope, plan_bulk_restore, set_enabled_in_games, uninstall_in_games, FanoutResult,
+    RestorePlan, ScopeHit, SkipReason,
 };
 pub use slot::{
     apply_slot_picks, convert_after_unplace, ensure_repick_free, is_self_slot, payload_drift,
@@ -84,6 +89,8 @@ mod tests_park_2;
 mod tests_park_3;
 #[cfg(test)]
 mod tests_provide;
+#[cfg(test)]
+mod tests_scope;
 #[cfg(test)]
 mod tests_slot;
 #[cfg(test)]

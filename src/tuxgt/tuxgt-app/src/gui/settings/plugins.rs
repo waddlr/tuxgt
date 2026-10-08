@@ -209,11 +209,11 @@ impl Shell {
                         .xsmall()
                         .on_click({
                             let view = view.clone();
-                            move |on, _, cx| {
+                            move |on, window, cx| {
                                 let on = *on;
                                 let oid = oid.clone();
                                 view.update(cx, |this, cx| {
-                                    this.set_instance_offered_ui(oid, on, cx);
+                                    this.set_instance_offered_ui(oid, on, window, cx);
                                 });
                             }
                         }),

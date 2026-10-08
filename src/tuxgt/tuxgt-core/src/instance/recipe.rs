@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::{Error, Result};
 
 pub(crate) const MODS_TOML: &str = "mods.toml";
+pub(crate) const BULK_DISABLED_TOML: &str = "bulk-disabled.toml";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Plan {

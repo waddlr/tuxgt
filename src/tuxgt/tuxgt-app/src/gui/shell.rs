@@ -204,6 +204,12 @@ pub struct Shell {
     pub(crate) redetect_confirm: bool,
     /// R34: manual id awaiting remove confirm (`None` = no dialog).
     pub(crate) manual_remove: Option<String>,
+    /// Settings remove fan-out dialog: the also-remove checkbox. Set to
+    /// its default (checked) when the dialog opens; the Yes choice reads it.
+    pub(crate) fanout_remove_games: bool,
+    /// Settings disable fan-out dialog: the scope radio. Set to its
+    /// default (no game changes) when the dialog opens; Yes reads it.
+    pub(crate) fanout_disable_choice: super::settings::FanoutDisableChoice,
     pub(crate) pending_confirm: Option<PendingConfirm>,
     /// E62 inline Install picker: open flag + checked ids in check order
     /// (the batch installs in that order).

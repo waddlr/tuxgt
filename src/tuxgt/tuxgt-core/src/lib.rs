@@ -79,10 +79,11 @@ pub use install::{
 };
 pub use instance::{
     add_mod, add_mod_from, add_mod_from_with_password, add_mod_with_password, apply_package_slot,
-    classify_package, classify_package_with_password, disable_mod, enable_mod, export_mod,
-    family_template, list_mods, list_templates, migrate_reshade_legacy, mint_recipe, mods_for_game,
-    remove_mod, rescan_mod, rescan_preview, resolve_source, scan_default_include, scan_package,
-    set_mod_offered, snap_family_asset, Classification, ClassifyKind, MintTarget, Mod, ModList,
+    classify_package, classify_package_with_password, clear_bulk_disabled, disable_mod, enable_mod,
+    export_mod, family_template, list_mods, list_templates, migrate_reshade_legacy, mint_recipe,
+    mods_for_game, read_bulk_disabled, record_bulk_disabled, remove_mod, rescan_mod,
+    rescan_preview, resolve_source, scan_default_include, scan_package, set_mod_offered,
+    snap_family_asset, unrecord_bulk_games, Classification, ClassifyKind, MintTarget, Mod, ModList,
     ModProblem, ModTemplate, PackageFile, PayloadRule, Plan, RecipeSpec, SourceRef, TemplateFamily,
 };
 pub use launch::{
@@ -99,15 +100,16 @@ pub use mods::{
     apply_slot_picks, check_catalog_update, check_update, clear_provided_files,
     convert_after_unplace, convert_game_adapter, effect_names_for, enabled_mod_count,
     ensure_repick_free, ensure_update_baseline, find_mod, has_apply_record, install_instance,
-    is_config_text, is_self_slot, migrate_mod_cache, mod_cache_rows, payload_config_path,
-    payload_drift, payload_has_files, payload_provenance, preflight_convert_picks,
-    preview_payload_files, provide_files, provide_files_with_password, provided_files,
-    push_global_edits, push_global_edits_all, recipe_slot_configurable, reconcile_mod_cache,
-    remembered_slot, resync_game, resync_instance, resync_repick_instances, set_file_keep,
-    set_file_load, set_instance_enabled, set_instance_slot, set_load_order, short_update_reason,
-    uninstall_instance, unplace_instance_slot, validate_adapter_convert, Baseline, CatalogStatus,
-    ConversionReport, InstallOpts, ModCacheRow, ProvideReport, ProvidedFiles, PushReport,
-    UpdateStatus, SELF_SLOT,
+    install_scope, is_config_text, is_self_slot, migrate_mod_cache, mod_cache_rows,
+    payload_config_path, payload_drift, payload_has_files, payload_provenance, plan_bulk_restore,
+    preflight_convert_picks, preview_payload_files, provide_files, provide_files_with_password,
+    provided_files, push_global_edits, push_global_edits_all, recipe_slot_configurable,
+    reconcile_mod_cache, remembered_slot, resync_game, resync_instance, resync_repick_instances,
+    set_enabled_in_games, set_file_keep, set_file_load, set_instance_enabled, set_instance_slot,
+    set_load_order, short_update_reason, uninstall_in_games, uninstall_instance,
+    unplace_instance_slot, validate_adapter_convert, Baseline, CatalogStatus, ConversionReport,
+    FanoutResult, InstallOpts, ModCacheRow, ProvideReport, ProvidedFiles, PushReport, RestorePlan,
+    ScopeHit, SkipReason, UpdateStatus, SELF_SLOT,
 };
 pub use modtype::{
     dest_for, diagnose, fixture_packages, is_addon, parse_mod_type, parse_slot, slot_dll,

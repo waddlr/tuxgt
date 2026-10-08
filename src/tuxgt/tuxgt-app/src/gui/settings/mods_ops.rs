@@ -1,36 +1,24 @@
-use gpui_kit::component::button::ButtonVariants as _;
-use gpui_kit::component::{h_flex, WindowExt as _};
 use gpui_kit::*;
 
-use tuxgt_core::{
-    config_dir, data_dir, list_mods, list_templates, remove_mod, set_mod_offered, FluentArgs,
-};
+use tuxgt_core::{config_dir, data_dir, list_mods, list_templates, remove_mod, FluentArgs};
 
-use super::super::widgets;
 use super::super::{rt_block, SettingsModsTab, Shell};
 use super::{pack_rows, tab_rows};
 
 impl Shell {
-    pub(crate) fn set_instance_offered_ui(&mut self, id: String, on: bool, cx: &mut Context<Self>) {
+    pub(crate) fn set_instance_offered_ui(
+        &mut self,
+        id: String,
+        on: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         tracing::debug!(action = "set-instance-offered", source = id.as_str(), on);
-        match set_mod_offered(&config_dir(), &id, on, &data_dir()) {
-            Ok(()) => {
-                if let Some(row) = self.instances.iter_mut().find(|r| r.id == id) {
-                    row.enabled = on;
-                }
-                self.refresh_selected_mods();
-                let mut args = FluentArgs::new();
-                args.set("instance", id);
-                let key = if on {
-                    "gui-status-instance-enabled"
-                } else {
-                    "gui-status-instance-disabled"
-                };
-                self.status = self.strings.get_args(key, Some(&args));
-            }
-            Err(e) => self.status = format!("{e}"),
+        if on {
+            self.confirm_restore_ui(id, window, cx);
+        } else {
+            self.confirm_disable_ui(id, window, cx);
         }
-        cx.notify();
     }
 
     /// Re-read the packaged official mods from disk (lock 12): after
@@ -126,46 +114,16 @@ impl Shell {
         }
     }
 
-    pub(crate) fn confirm_remove_visible_mods(&self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn confirm_remove_visible_mods(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let ids = self.visible_user_mod_ids(cx);
         if ids.is_empty() {
             return;
         }
-        let mut args = FluentArgs::new();
-        args.set("n", ids.len().to_string());
-        let title = self
-            .strings
-            .get_args("gui-note-remove-visible", Some(&args));
-        let confirm = self.strings.get("gui-action-confirm");
-        let cancel = self.strings.get("gui-action-cancel");
-        let view = cx.entity();
-        window.open_dialog(cx, move |dialog, _, cx| {
-            dialog.title(title.clone()).child(
-                h_flex()
-                    .gap_2()
-                    .child(
-                        widgets::btn("remove-visible-yes", cx)
-                            .danger()
-                            .child(widgets::blabel(confirm.clone(), cx))
-                            .on_click({
-                                let view = view.clone();
-                                let ids = ids.clone();
-                                move |_, window, cx| {
-                                    window.close_dialog(cx);
-                                    view.update(cx, |this, cx| {
-                                        this.remove_visible_mods_ui(ids.clone(), cx);
-                                    });
-                                }
-                            }),
-                    )
-                    .child(
-                        widgets::btn("remove-visible-no", cx)
-                            .ghost()
-                            .child(widgets::blabel(cancel.clone(), cx))
-                            .on_click(|_, window, cx| window.close_dialog(cx)),
-                    ),
-            )
-        });
+        self.confirm_remove_visible_scope(ids, window, cx);
     }
 
     pub(crate) fn remove_visible_mods_ui(&mut self, ids: Vec<String>, cx: &mut Context<Self>) {
@@ -200,12 +158,20 @@ impl Shell {
                         if this.instances_showing() {
                             this.instances = rows.into_boxed_slice();
                         }
+                        this.catalog_meta = super::load_catalog_meta();
                         this.refresh_selected_mods();
                         let mut args = FluentArgs::new();
                         args.set("n", n.to_string());
                         this.status = this.strings.get_args("gui-status-removed-n", Some(&args));
                     }
                     Err(e) => {
+                        // The loop may have removed earlier mods before
+                        // failing: reload so the list cannot show ghosts.
+                        if this.instances_showing() {
+                            this.instances = super::load_instances().into_boxed_slice();
+                        }
+                        this.catalog_meta = super::load_catalog_meta();
+                        this.refresh_selected_mods();
                         let mut args = FluentArgs::new();
                         args.set("error", e.to_string());
                         this.status = this.strings.get_args("gui-status-err-remove", Some(&args));
@@ -253,6 +219,7 @@ impl Shell {
                         if this.instances_showing() {
                             this.instances = rows.into_boxed_slice();
                         }
+                        this.catalog_meta = super::load_catalog_meta();
                         this.refresh_selected_mods();
                         let mut args = FluentArgs::new();
                         args.set("id", id.clone());

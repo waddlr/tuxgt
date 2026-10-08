@@ -9,6 +9,9 @@ mod extras;
 mod extras_box;
 mod family;
 mod family_box;
+mod fanout_disable;
+mod fanout_remove;
+mod fanout_ui;
 mod general;
 mod gpu;
 mod host;
@@ -28,6 +31,7 @@ mod update_live;
 pub(crate) use add_pick::*;
 pub(crate) use add_scan::*;
 pub(crate) use export::*;
+pub(crate) use fanout_ui::FanoutDisableChoice;
 pub(crate) use update::AppUpdate;
 pub(crate) use update_live::AppUpdateLive;
 
