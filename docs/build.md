@@ -6,9 +6,9 @@ All commands below are verified against the `Makefile` in the repo root. Run the
 
 ## Prerequisites
 
-- `gcc` and `make` — for the preload library (`src/launcher/*.c` → `build/libtuxgt-launcher.so`, built as `gcc -shared -fPIC -O2 -fvisibility=hidden -o … -ldl -lcrypto`). The resulting `.so` needs `libcrypto.so.3` at runtime (same as the shipped tarball).
+- `gcc` and `make` — for the preload library (`src/launcher/*.c` → `build/libtuxgt-launcher.so`, built as `gcc -shared -fPIC -O2 -march=x86-64 -mtune=generic -fvisibility=hidden -o … -ldl -lcrypto`). The resulting `.so` needs `libcrypto.so.3` at runtime (same as the shipped tarball).
 - **Rust toolchain** with `cargo` — stable is fine (`rustc` + `cargo`). TuxGT is a Cargo workspace at `src/tuxgt` (edition 2021, members `tuxgt-core` and `tuxgt-app` — the binary crate is named `tuxgt`). No extra `rustup` components are required.
-- `tar` and `gzip` — for `make package` (`tar -czf`).
+- `tar` and `gzip` — for `make package` (deterministic `tar` + `gzip -n`).
 - `x86_64-w64-mingw32-gcc` (mingw-w64) — only for `make proxy` (the nvngx workaround DLL).
 
 You do not need a Proton install, Heroic install, or any store account to build.
@@ -63,8 +63,11 @@ Depends on `prepare` (so building the package always rebuilds the product tree f
 ```sh
 rm -rf dist
 mkdir -p dist
-tar -czf $(CURDIR)/dist/tuxgt.tar.gz -C build/pkg tuxgt
+tar --sort=name --owner=0 --group=0 --mtime=@$SOURCE_DATE_EPOCH -cf $(CURDIR)/dist/tuxgt.tar -C build/pkg tuxgt
+gzip -n -f $(CURDIR)/dist/tuxgt.tar
 ```
+
+`SOURCE_DATE_EPOCH` defaults to the version-commit time (`git log -1 --format=%ct`), so the same commit always produces byte-identical `dist/tuxgt.tar.gz`.
 
 Result: `dist/tuxgt.tar.gz` — unpacks to a single top-level `tuxgt/` directory with the layout shown in [Install](install.md). Only `make package TYPE=release` (or `make release`, which forces it) produces the shippable tarball; a default `make package` bundles the dev binary for a quick layout check. Extract to test:
 
@@ -115,7 +118,7 @@ Requires a clean tree on `master` (a dirty tree is refused, not stashed), `gh` i
 
 ## CPU baseline
 
-Every Rust build pins `-C target-cpu=x86-64`: the `Makefile` sets `RUSTFLAGS` for all three `TYPE`s (dev included, so dev never tests znver5 codegen for an x86-64 target), and repo-root `.cargo/config.toml` covers bare `cargo` invocations. The `tuxgt` binary runs on any x86-64 CPU; dependency SIMD (ring/sha2/memchr) stays runtime-dispatched behind CPUID checks. The C launcher needs no pin (plain `gcc -O2`, no `-march`). `make release` refuses to tag/push/upload when the release fingerprint lacks the pin; `make check-baseline TYPE=release` runs the same check by hand.
+Every Rust build pins `-C target-cpu=x86-64`: the `Makefile` sets `RUSTFLAGS` for all three `TYPE`s (dev included, so dev never tests znver5 codegen for an x86-64 target), and repo-root `.cargo/config.toml` covers bare `cargo` invocations. The `tuxgt` binary runs on any x86-64 CPU; dependency SIMD (ring/sha2/memchr) stays runtime-dispatched behind CPUID checks. The C launcher and the mingw proxy pin the same floor explicitly (`-march=x86-64 -mtune=generic` on both gcc lines and the proxy line); the proxy link also passes `-Wl,--no-insert-timestamp` so the DLL carries no wall-clock TimeDateStamp. `make release` refuses to tag/push/upload when the release fingerprint lacks the pin; `make check-baseline TYPE=release` runs the same check by hand.
 
 ## Repo layout
 

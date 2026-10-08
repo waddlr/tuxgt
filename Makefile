@@ -28,6 +28,19 @@ BIN_SRC := src/tuxgt/target/$(TARGET_SUBDIR)/tuxgt
 # .cargo/config.toml); the config file covers only bare `cargo` invocations.
 TUXGT_TARGET_CPU := x86-64
 
+# Same floor for C (build.cpu-baseline): command-line flags, so no
+# environment-override games like RUSTFLAGS.
+TUXGT_C_BASELINE := -march=x86-64 -mtune=generic
+
+# Deterministic build instant (docs/dev/build.md): version-commit time, used
+# for the tarball mtime in every TYPE and exported to cargo for release.
+# `?=` lets the environment win (SOURCE_DATE_EPOCH convention); without git
+# metadata the wall clock fills in (non-reproducible, still builds).
+SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date +%s)
+ifeq ($(TYPE),release)
+export SOURCE_DATE_EPOCH
+endif
+
 .PHONY: all preload proxy build prepare package deploy release clean clean-full check-baseline
 
 PREPARE := $(BUILD)/pkg/tuxgt
@@ -42,11 +55,11 @@ preload: $(BUILD)/libtuxgt-launcher.so $(BUILD)/libtuxgt-launcher32.so
 LAUNCHER_C := $(wildcard src/launcher/*.c)
 $(BUILD)/libtuxgt-launcher.so: $(LAUNCHER_C) src/launcher/tuxgt-launcher.h
 	@mkdir -p $(BUILD)
-	gcc -shared -fPIC -O2 -fvisibility=hidden -o $@ $(LAUNCHER_C) -ldl -lcrypto
+	gcc -shared -fPIC -O2 $(TUXGT_C_BASELINE) -fvisibility=hidden -o $@ $(LAUNCHER_C) -ldl -lcrypto
 	@echo "built $@"
 $(BUILD)/libtuxgt-launcher32.so: $(LAUNCHER_C) src/launcher/tuxgt-launcher.h
 	@mkdir -p $(BUILD)
-	@if gcc -m32 -shared -fPIC -O2 -fvisibility=hidden -o $@ $(LAUNCHER_C) -ldl -lcrypto 2>/dev/null; then echo "built $@"; else echo "skip $@ (no -m32)"; rm -f $@; fi
+	@if gcc -m32 -shared -fPIC -O2 $(TUXGT_C_BASELINE) -fvisibility=hidden -o $@ $(LAUNCHER_C) -ldl -lcrypto 2>/dev/null; then echo "built $@"; else echo "skip $@ (no -m32)"; rm -f $@; fi
 
 # Workaround proxy DLL (Windows-only, mingw). Standalone target: no other
 # target depends on it. -Wno-cast-function-type: GetProcAddress casts are
@@ -61,7 +74,7 @@ PROXY_SRC := src/workarounds/nvngx-dlssnr-proxy
 $(BUILD)/nvngx_dlssnr.dll: $(PROXY_SRC)/proxy.c $(PROXY_SRC)/nvngx_dlssnr.def
 	@mkdir -p $(BUILD)
 	@if [ -z "$(MINGW_CC)" ]; then echo "error: mingw toolchain not found (need x86_64-w64-mingw32-gcc or -clang)" >&2; exit 1; fi
-	$(MINGW_CC) -shared -O2 -s -Wall -Wextra -Werror -Wno-cast-function-type -o $@ $(PROXY_SRC)/proxy.c $(PROXY_SRC)/nvngx_dlssnr.def
+	$(MINGW_CC) -shared -O2 $(TUXGT_C_BASELINE) -s -Wall -Wextra -Werror -Wno-cast-function-type -Wl,--no-insert-timestamp -o $@ $(PROXY_SRC)/proxy.c $(PROXY_SRC)/nvngx_dlssnr.def
 	@echo "built $@"
 
 # TYPE=dev (default): fast incremental debug. TYPE=trace: release opts, unstripped +
@@ -121,7 +134,8 @@ prepare: preload build
 package: prepare
 	rm -rf dist
 	mkdir -p dist
-	tar -czf $(CURDIR)/dist/tuxgt.tar.gz -C $(BUILD)/pkg tuxgt
+	tar --sort=name --owner=0 --group=0 --mtime=@$(SOURCE_DATE_EPOCH) -cf $(CURDIR)/dist/tuxgt.tar -C $(BUILD)/pkg tuxgt
+	gzip -n -f $(CURDIR)/dist/tuxgt.tar
 	@echo "packaged dist/tuxgt.tar.gz"
 
 # Developer overlay: refresh bin/lib/share from the prepared tree into the

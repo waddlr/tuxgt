@@ -244,7 +244,7 @@ impl Shell {
         let t = types(cx);
         let data = data_dir();
         let version = env!("CARGO_PKG_VERSION").to_string();
-        let built = option_env!("VERGEN_BUILD_DATE").unwrap_or("unknown");
+        let built = crate::build_info::format_build_instant(option_env!("VERGEN_BUILD_TIMESTAMP"));
         widgets::section_card("about", cx)
             .child(widgets::section_title(
                 self.strings.get("gui-section-about-app"),

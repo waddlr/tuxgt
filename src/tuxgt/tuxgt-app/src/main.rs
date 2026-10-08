@@ -1,4 +1,5 @@
 mod args;
+mod build_info;
 mod cli;
 mod gui;
 mod log;
@@ -335,7 +336,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match current_name.as_deref() {
             Some(name) => tracing::info!(
                 version = env!("CARGO_PKG_VERSION"),
-                built = option_env!("VERGEN_BUILD_DATE").unwrap_or("unknown"),
+                built =
+                    crate::build_info::format_build_instant(option_env!("VERGEN_BUILD_TIMESTAMP")),
                 os = sys.os.as_str(),
                 desktop = sys.desktop.as_str(),
                 gpu = sys.gpu.as_str(),
@@ -348,7 +350,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ),
             None => tracing::info!(
                 version = env!("CARGO_PKG_VERSION"),
-                built = option_env!("VERGEN_BUILD_DATE").unwrap_or("unknown"),
+                built =
+                    crate::build_info::format_build_instant(option_env!("VERGEN_BUILD_TIMESTAMP")),
                 os = sys.os.as_str(),
                 desktop = sys.desktop.as_str(),
                 gpu = sys.gpu.as_str(),
