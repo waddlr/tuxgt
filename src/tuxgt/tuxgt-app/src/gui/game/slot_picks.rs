@@ -7,7 +7,8 @@ use super::super::{Shell, SlotPick};
 
 #[derive(Clone, Copy)]
 pub(crate) enum PickKind {
-    /// Fresh install: the recipe slot, else `dxgi`.
+    /// Fresh install: the recipe slot when API-compatible, else the API
+    /// default, else `dxgi`.
     Recipe,
     /// Preload → Install: the current proxy stem, else the recipe slot.
     ConvertInstall,
@@ -22,6 +23,7 @@ pub(crate) fn pick_slot(
     current: Option<&str>,
     recipe: Option<&str>,
     remembered: Option<&str>,
+    api: Option<&str>,
 ) -> String {
     if matches!(kind, PickKind::ConvertInstall | PickKind::ConvertPreload) {
         if let Some(token) = remembered {
@@ -33,17 +35,33 @@ pub(crate) fn pick_slot(
             }
         }
     }
-    let proxy = current.filter(|s| tuxgt_core::parse_slot(s).is_ok());
-    let recipe = recipe.filter(|s| tuxgt_core::parse_slot(s).is_ok());
+    let proxy = current.and_then(|s| tuxgt_core::parse_slot(s).ok().map(|p| p.as_str()));
+    // A recipe stem outside the game's API set never becomes the default;
+    // the API default does (unknown API keeps every parsed stem).
+    let recipe = recipe
+        .and_then(|s| tuxgt_core::parse_slot(s).ok().map(|p| p.as_str()))
+        .filter(|s| tuxgt_core::slots_for_api(api).contains(s));
+    let api_default = tuxgt_core::default_slot_for_api(api);
     match kind {
         PickKind::ConvertPreload => tuxgt_core::SELF_SLOT.to_string(),
         PickKind::Resync => proxy.unwrap_or(tuxgt_core::SELF_SLOT).to_string(),
-        PickKind::ConvertInstall => proxy.or(recipe).unwrap_or("dxgi").to_string(),
-        PickKind::Recipe => recipe.unwrap_or("dxgi").to_string(),
+        PickKind::ConvertInstall => proxy
+            .or(recipe)
+            .or(api_default)
+            .unwrap_or("dxgi")
+            .to_string(),
+        PickKind::Recipe => recipe.or(api_default).unwrap_or("dxgi").to_string(),
     }
 }
 
 impl Shell {
+    pub(crate) fn game_api(&self, game: &str) -> Option<&str> {
+        self.games
+            .iter()
+            .find(|g| g.id == game)
+            .and_then(|g| g.api.as_deref())
+    }
+
     pub(crate) fn picks_for(
         &self,
         game: &str,
@@ -70,6 +88,7 @@ impl Shell {
                     current.as_deref(),
                     recipe.as_deref(),
                     remembered.as_deref(),
+                    api,
                 );
                 let stock = row
                     .and_then(|r| super::super::slot_show::stock_menu_label(&r.file_entries))
@@ -130,12 +149,18 @@ mod tests {
     #[test]
     fn defaults_follow_the_op() {
         assert_eq!(
-            pick_slot(PickKind::Recipe, None, Some("d3d12"), None),
+            pick_slot(PickKind::Recipe, None, Some("d3d12"), None, None),
             "d3d12"
         );
-        assert_eq!(pick_slot(PickKind::Recipe, None, None, None), "dxgi");
+        assert_eq!(pick_slot(PickKind::Recipe, None, None, None, None), "dxgi");
         assert_eq!(
-            pick_slot(PickKind::ConvertInstall, Some("d3d12"), Some("dxgi"), None),
+            pick_slot(
+                PickKind::ConvertInstall,
+                Some("d3d12"),
+                Some("dxgi"),
+                None,
+                None
+            ),
             "d3d12"
         );
         assert_eq!(
@@ -143,6 +168,7 @@ mod tests {
                 PickKind::ConvertInstall,
                 Some("ReShade64.dll"),
                 Some("dxgi"),
+                None,
                 None
             ),
             "dxgi"
@@ -152,12 +178,19 @@ mod tests {
                 PickKind::ConvertInstall,
                 Some("ReShade64.dll"),
                 Some("dxgi"),
-                Some("d3d12")
+                Some("d3d12"),
+                None
             ),
             "d3d12"
         );
         assert_eq!(
-            pick_slot(PickKind::ConvertPreload, Some("dxgi"), Some("dxgi"), None),
+            pick_slot(
+                PickKind::ConvertPreload,
+                Some("dxgi"),
+                Some("dxgi"),
+                None,
+                None
+            ),
             "<self>"
         );
         assert_eq!(
@@ -165,7 +198,8 @@ mod tests {
                 PickKind::ConvertPreload,
                 Some("dxgi"),
                 Some("dxgi"),
-                Some("winmm")
+                Some("winmm"),
+                None
             ),
             "winmm"
         );
@@ -174,17 +208,57 @@ mod tests {
                 PickKind::ConvertPreload,
                 Some("dxgi"),
                 Some("dxgi"),
-                Some("<self>")
+                Some("<self>"),
+                None
             ),
             "<self>"
         );
         assert_eq!(
-            pick_slot(PickKind::Resync, Some("winmm"), None, Some("dxgi")),
+            pick_slot(PickKind::Resync, Some("winmm"), None, Some("dxgi"), None),
             "winmm"
         );
         assert_eq!(
-            pick_slot(PickKind::Resync, Some("OptiScaler.dll"), Some("dxgi"), None),
+            pick_slot(
+                PickKind::Resync,
+                Some("OptiScaler.dll"),
+                Some("dxgi"),
+                None,
+                None
+            ),
             "<self>"
+        );
+    }
+
+    #[test]
+    fn fresh_defaults_follow_the_game_api() {
+        // Off-API recipe stem loses to the API default.
+        assert_eq!(
+            pick_slot(PickKind::Recipe, None, Some("dxgi"), None, Some("dx9")),
+            "d3d9"
+        );
+        // Compatible recipe stem still wins.
+        assert_eq!(
+            pick_slot(PickKind::Recipe, None, Some("dxgi"), None, Some("dx12")),
+            "dxgi"
+        );
+        assert_eq!(
+            pick_slot(PickKind::Recipe, None, None, None, Some("opengl")),
+            "opengl32"
+        );
+        assert_eq!(
+            pick_slot(PickKind::Recipe, None, None, None, Some("vulkan")),
+            "<self>"
+        );
+        // Conversions preserve the current stem even when off-API.
+        assert_eq!(
+            pick_slot(
+                PickKind::ConvertInstall,
+                Some("dxgi"),
+                Some("dxgi"),
+                None,
+                Some("dx9")
+            ),
+            "dxgi"
         );
     }
 

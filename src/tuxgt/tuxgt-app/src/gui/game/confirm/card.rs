@@ -114,9 +114,11 @@ impl Shell {
                 }
                 (note, picks, self.strings.get("gui-action-install-requires"))
             }
-            PendingConfirm::SlotChoice { op, picks, .. } => (
+            PendingConfirm::SlotChoice {
+                game, op, picks, ..
+            } => (
                 widgets::muted(self.strings.get("gui-note-slot-choice"), cx).into_any_element(),
-                self.slot_choice_rows(view.clone(), picks, self.slot_self_warns(op), cx),
+                self.slot_choice_rows(view.clone(), game, picks, self.slot_self_warns(op), cx),
                 self.strings.get("gui-action-confirm"),
             ),
             PendingConfirm::ClientStop { game, .. } => {

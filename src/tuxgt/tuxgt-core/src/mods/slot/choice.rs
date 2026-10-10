@@ -16,6 +16,37 @@ pub fn is_self_slot(slot: &str) -> bool {
     slot == SELF_SLOT
 }
 
+/// Proxy stems that can load in a game of this API (ReShade's install
+/// table: dx9→d3d9, dx10/11/12→dxgi plus the matching versioned stem,
+/// opengl→opengl32, vulkan→none).
+/// `winmm`/`version` are generic import-loaded fallbacks, so they stay in
+/// every set. Unknown/empty API keeps the full legacy set.
+pub fn slots_for_api(api: Option<&str>) -> &'static [&'static str] {
+    match api.unwrap_or("") {
+        "dx9" => &["d3d9", "winmm", "version"],
+        "dx10" => &["dxgi", "d3d10", "winmm", "version"],
+        "dx11" => &["dxgi", "d3d11", "winmm", "version"],
+        "dx12" => &["dxgi", "d3d12", "winmm", "version"],
+        "opengl" => &["opengl32", "winmm", "version"],
+        "vulkan" => &["winmm", "version"],
+        _ => &[
+            "dxgi", "d3d9", "d3d10", "d3d11", "d3d12", "opengl32", "winmm", "version",
+        ],
+    }
+}
+
+/// Fresh-install default stem for a game of this API. `None` (unknown API)
+/// means the caller falls back to the recipe-or-`dxgi` legacy default.
+pub fn default_slot_for_api(api: Option<&str>) -> Option<&'static str> {
+    match api.unwrap_or("") {
+        "dx9" => Some("d3d9"),
+        "dx10" | "dx11" | "dx12" => Some("dxgi"),
+        "opengl" => Some("opengl32"),
+        "vulkan" => Some(SELF_SLOT),
+        _ => None,
+    }
+}
+
 fn basename(path: &str) -> &str {
     path.rsplit(['/', '\\']).next().unwrap_or(path)
 }
@@ -233,6 +264,36 @@ mod tests {
             "dxgi.dll"
         );
         assert!(resolve_slot_dest("nope", "ReShade64.dll").is_err());
+    }
+
+    #[test]
+    fn api_sets_follow_the_install_table() {
+        assert_eq!(slots_for_api(Some("dx9")), &["d3d9", "winmm", "version"]);
+        assert_eq!(
+            slots_for_api(Some("dx11")),
+            &["dxgi", "d3d11", "winmm", "version"]
+        );
+        assert_eq!(
+            slots_for_api(Some("opengl")),
+            &["opengl32", "winmm", "version"]
+        );
+        assert_eq!(slots_for_api(Some("vulkan")), &["winmm", "version"]);
+        assert!(!slots_for_api(Some("dx9")).contains(&"dxgi"));
+        assert!(!slots_for_api(Some("vulkan")).contains(&"dxgi"));
+        let full = slots_for_api(None);
+        assert_eq!(full.len(), 8);
+        assert_eq!(slots_for_api(Some("")), full);
+        assert_eq!(slots_for_api(Some("bogus")), full);
+    }
+
+    #[test]
+    fn api_defaults_prefer_the_native_stem() {
+        assert_eq!(default_slot_for_api(Some("dx9")), Some("d3d9"));
+        assert_eq!(default_slot_for_api(Some("dx12")), Some("dxgi"));
+        assert_eq!(default_slot_for_api(Some("opengl")), Some("opengl32"));
+        assert_eq!(default_slot_for_api(Some("vulkan")), Some(SELF_SLOT));
+        assert_eq!(default_slot_for_api(None), None);
+        assert_eq!(default_slot_for_api(Some("")), None);
     }
 
     #[test]

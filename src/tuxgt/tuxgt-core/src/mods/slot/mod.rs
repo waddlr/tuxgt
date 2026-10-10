@@ -22,7 +22,8 @@ pub(crate) use choice::{
     resolve_slot_dest, stock_basename,
 };
 pub use choice::{
-    ensure_repick_free, is_self_slot, recipe_slot_configurable, resync_repick_instances, SELF_SLOT,
+    default_slot_for_api, ensure_repick_free, is_self_slot, recipe_slot_configurable,
+    resync_repick_instances, slots_for_api, SELF_SLOT,
 };
 pub(crate) use modes::forget_instance;
 pub use modes::remembered_slot;

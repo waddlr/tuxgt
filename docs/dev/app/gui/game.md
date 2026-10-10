@@ -248,7 +248,16 @@ accordion, never card-header buttons. Graph line only for missing requires or
 slot conflicts.
 
 **Slot** (`gui.mod-slot`) — `value_btn` on the card's second line, slot-capable
-installed cards only. The GUI paints section-major order and writes it back on
+installed cards only. The menu lists the stock name plus the proxy stems
+that can load in the game's effective API (dx9→`d3d9`,
+dx10/11/12→`dxgi` plus the matching versioned stem, opengl→`opengl32`,
+vulkan→none;
+`winmm`/`version` always; unknown API keeps the full set), plus the
+currently shown stem when it parses, so a legacy off-API dest stays
+selectable. Fresh-install slot picks default to the recipe stem when it
+is API-compatible, else the API default (`d3d9`/`dxgi`/`opengl32`/
+stock for vulkan), else the legacy `dxgi`; conversions keep the current
+stem. The GUI paints section-major order and writes it back on
 any reorder (`set_load_order` still receives exactly the game’s installed ids); the engine
 order is the stored `load_order`, which a fresh install appends to
 (install order) and which only a reorder rewrites. The move cluster

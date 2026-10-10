@@ -2,7 +2,7 @@
 //! stem. The closed control and the menu share one claiming file. Diagnose
 //! still uses [`super::load_mods::proxy_slot`].
 
-use super::{ModFileRow, Shell};
+use super::ModFileRow;
 
 /// A proxy dest shows its stem (`dxgi`). Anything else shows that dest's
 /// filename (`ReShade64.dll`). `None` when there is no top-level DLL to name.
@@ -45,16 +45,28 @@ pub(crate) fn install_stock_warning(adapter: &str, shown: &str) -> bool {
 
 /// Menu rows: `(label, value)`. `value` is what core receives. The stock
 /// row's label is the dest filename; its value stays `<self>`. `unknown`
-/// is the label when that filename is not known.
-pub(crate) fn slot_menu(stock: &str, unknown: &str) -> Vec<(String, &'static str)> {
+/// is the label when that filename is not known. Stems follow the game's
+/// API; `current` (the shown stem, if any) is grandfathered in so a legacy
+/// off-API dest stays selectable.
+pub(crate) fn slot_menu(
+    stock: &str,
+    unknown: &str,
+    api: Option<&str>,
+    current: Option<&str>,
+) -> Vec<(String, &'static str)> {
     let self_label = if stock.is_empty() {
         plain_label(unknown)
     } else {
         stock.to_string()
     };
-    let mut out = Vec::with_capacity(1 + Shell::ADD_SLOTS.len());
+    let stems = tuxgt_core::slots_for_api(api);
+    let mut out = Vec::with_capacity(2 + stems.len());
     out.push((self_label, tuxgt_core::SELF_SLOT));
-    for stem in Shell::ADD_SLOTS {
+    for stem in stems {
+        out.push((stem.to_string(), stem));
+    }
+    let extra = current.and_then(|c| tuxgt_core::parse_slot(c).ok().map(|s| s.as_str()));
+    if let Some(stem) = extra.filter(|s| !stems.contains(s)) {
         out.push((stem.to_string(), stem));
     }
     out
@@ -336,14 +348,14 @@ mod tests {
 
     #[test]
     fn menu_label_is_not_the_token() {
-        let menu = slot_menu("ReShade64.dll", "DLL name");
+        let menu = slot_menu("ReShade64.dll", "DLL name", None, None);
         assert_eq!(menu[0].0, "ReShade64.dll");
         assert_eq!(menu[0].1, "<self>");
         assert_eq!(menu[1].1, "dxgi");
         assert_eq!(menu[2].1, "d3d9");
         assert_eq!(menu[3].1, "d3d10");
         assert!(menu.iter().any(|(_, v)| *v == "opengl32"));
-        let unknown = slot_menu("", "DLL name");
+        let unknown = slot_menu("", "DLL name", None, None);
         assert_eq!(unknown[0].0, "DLL name");
         assert_eq!(unknown[0].1, "<self>");
         assert!(!unknown[0].0.contains("<self>"));
@@ -366,6 +378,36 @@ mod tests {
         );
         assert_eq!(status_slot_name("<self>", &[], "DLL name"), "DLL name");
         assert!(!status_slot_name("<self>", &[], "<self>").contains("<self>"));
+    }
+
+    #[test]
+    fn menu_follows_the_game_api() {
+        let values = |menu: Vec<(String, &'static str)>| {
+            menu.into_iter().map(|(_, v)| v).collect::<Vec<_>>()
+        };
+        let dx9 = values(slot_menu("ReShade64.dll", "DLL name", Some("dx9"), None));
+        assert!(dx9.contains(&"d3d9"));
+        assert!(!dx9.contains(&"dxgi"));
+        let vk = values(slot_menu("ReShade64.dll", "DLL name", Some("vulkan"), None));
+        assert!(!vk.contains(&"dxgi"));
+        assert!(!vk.contains(&"d3d9"));
+        assert!(vk.contains(&"winmm"));
+        // A legacy off-API dest stays selectable via the current stem.
+        let legacy = values(slot_menu(
+            "ReShade64.dll",
+            "DLL name",
+            Some("dx9"),
+            Some("dxgi"),
+        ));
+        assert!(legacy.contains(&"dxgi"));
+        // Stock names and `<self>` never append a row.
+        let stock = values(slot_menu(
+            "ReShade64.dll",
+            "DLL name",
+            Some("dx9"),
+            Some("ReShade64.dll"),
+        ));
+        assert_eq!(stock, dx9);
     }
 
     #[test]

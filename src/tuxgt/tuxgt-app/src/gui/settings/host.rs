@@ -348,10 +348,4 @@ impl Shell {
         }
         self.host_inventory_missing = load_host_inventory(&prefix).ok().flatten().is_none();
     }
-
-    /// Slot dropdown options (Add form used these; per-game installed cards
-    /// in `game.rs` still do). Same closed set as core `ProxySlot`.
-    pub(crate) const ADD_SLOTS: [&'static str; 8] = [
-        "dxgi", "d3d9", "d3d10", "d3d11", "d3d12", "opengl32", "winmm", "version",
-    ];
 }

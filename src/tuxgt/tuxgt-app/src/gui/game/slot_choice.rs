@@ -32,6 +32,7 @@ impl Shell {
     pub(crate) fn slot_choice_rows(
         &self,
         view: Entity<Self>,
+        game: &str,
         picks: &[SlotPick],
         warn_self: bool,
         cx: &App,
@@ -48,6 +49,12 @@ impl Shell {
                     super::super::slot_show::choice_label(&pick.slot, &pick.stock, &unknown);
                 let stock = pick.stock.clone();
                 let menu_unknown = unknown.clone();
+                let rows = super::super::slot_show::slot_menu(
+                    &stock,
+                    &menu_unknown,
+                    self.game_api(game),
+                    Some(&pick.slot),
+                );
                 let row = h_flex()
                     .gap_2()
                     .items_center()
@@ -58,10 +65,9 @@ impl Shell {
                             shown,
                             move |menu, _, _| {
                                 let mut menu = menu;
-                                for (label, value) in
-                                    super::super::slot_show::slot_menu(&stock, &menu_unknown)
-                                {
-                                    menu = menu.item(PopupMenuItem::new(label).on_click({
+                                for (label, value) in &rows {
+                                    let value = *value;
+                                    menu = menu.item(PopupMenuItem::new(label.clone()).on_click({
                                         let view = change_view.clone();
                                         let inst = inst.clone();
                                         move |_, _, cx| {

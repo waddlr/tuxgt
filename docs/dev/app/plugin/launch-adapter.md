@@ -118,7 +118,9 @@ overrides per call.
   snapshot: a rolled-back conversion keeps the picked dest and the old adapter;
 - a fresh Install-adapter install of a slot-configurable mod with no prior manifest and
   no `InstallOpts.slot` returns `NeedSlotChoice` before download. The GUI default is the
-  recipe slot (`dxgi` when the recipe names none) and `<self>` is in the list, with a
+  recipe slot when it is in the game's API set, else the API default (`d3d9`/`dxgi`/
+  `opengl32`, stock for vulkan; unknown API keeps recipe-or-`dxgi`), and the menu lists
+  the API set plus the stock name and the current stem, with a
   warning that the game will not load a stock-named DLL. Preload installs keep the stock
   basename. A recipe `slot = "dxgi"` is only that Install-prompt default. `OptiScaler.dll`
   is not rewritten to `dxgi.dll`;

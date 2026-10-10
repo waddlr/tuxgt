@@ -46,10 +46,11 @@ pub use scope::{
     RestorePlan, ScopeHit, SkipReason,
 };
 pub use slot::{
-    apply_slot_picks, convert_after_unplace, ensure_repick_free, is_self_slot, payload_drift,
-    preflight_convert_picks, push_global_edits, push_global_edits_all, recipe_slot_configurable,
-    remembered_slot, resync_game, resync_instance, resync_repick_instances, set_instance_slot,
-    set_load_order, unplace_instance_slot, PushReport, SELF_SLOT,
+    apply_slot_picks, convert_after_unplace, default_slot_for_api, ensure_repick_free,
+    is_self_slot, payload_drift, preflight_convert_picks, push_global_edits, push_global_edits_all,
+    recipe_slot_configurable, remembered_slot, resync_game, resync_instance,
+    resync_repick_instances, set_instance_slot, set_load_order, slots_for_api,
+    unplace_instance_slot, PushReport, SELF_SLOT,
 };
 pub(crate) use slot::{claiming_slot_index, is_named_injector};
 pub use uninstall::{enabled_mod_count, has_apply_record, read_manifest_opt, uninstall_instance};

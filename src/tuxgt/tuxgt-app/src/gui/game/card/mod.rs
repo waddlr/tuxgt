@@ -165,6 +165,13 @@ impl Shell {
                         let stock = super::super::slot_show::stock_menu_label(&row.file_entries)
                             .unwrap_or_default();
                         let unknown = self.strings.get("gui-slot-self-label");
+                        let api = self.game_api(&game_id);
+                        let rows = super::super::slot_show::slot_menu(
+                            &stock,
+                            &unknown,
+                            api,
+                            Some(&row.slot),
+                        );
                         this.child(widgets::labeled_row(
                             row.ids.slot_row.clone(),
                             self.strings.get("gui-add-slot"),
@@ -178,21 +185,22 @@ impl Shell {
                                     let inst = inst.clone();
                                     move |menu, _, _| {
                                         let mut menu = menu;
-                                        for (label, value) in
-                                            super::super::slot_show::slot_menu(&stock, &unknown)
-                                        {
-                                            menu = menu.item(PopupMenuItem::new(label).on_click({
-                                                let view = view.clone();
-                                                let game_id = game_id.clone();
-                                                let inst = inst.clone();
-                                                move |_, _, cx| {
-                                                    view.update(cx, |this, cx| {
-                                                        this.slot_change_ui(
-                                                            &game_id, &inst, value, false, cx,
-                                                        );
-                                                    });
-                                                }
-                                            }));
+                                        for (label, value) in &rows {
+                                            let value = *value;
+                                            menu = menu.item(
+                                                PopupMenuItem::new(label.clone()).on_click({
+                                                    let view = view.clone();
+                                                    let game_id = game_id.clone();
+                                                    let inst = inst.clone();
+                                                    move |_, _, cx| {
+                                                        view.update(cx, |this, cx| {
+                                                            this.slot_change_ui(
+                                                                &game_id, &inst, value, false, cx,
+                                                            );
+                                                        });
+                                                    }
+                                                }),
+                                            );
                                         }
                                         menu
                                     }
