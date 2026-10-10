@@ -21,6 +21,9 @@ pub async fn install_instance(
 ) -> Result<FileManifest> {
     let adapter =
         super::adapter::resolve_install_adapter(pool, game, opts.adapter.as_deref()).await?;
+    // Vulkan games are preload-only; refuse an install resolution (stored
+    // choice or explicit override) before any mutation.
+    crate::game::ensure_install_allowed(pool, game, &adapter).await?;
     tracing::debug!(
         game,
         instance = instance_id,

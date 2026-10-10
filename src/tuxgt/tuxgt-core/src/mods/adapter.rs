@@ -256,6 +256,9 @@ async fn plan_conversion(
     slots_chosen: bool,
 ) -> Result<ConvertPlan> {
     let from = game_adapter(pool, game).await?;
+    // Vulkan games are preload-only (no proxy slot loads there); refuse the
+    // install target here so the dry-run and the conversion agree.
+    crate::game::ensure_install_allowed(pool, game, target).await?;
     // Refuse before any mutation: an enabled instance's recipe that
     // disallows the target, or one that is gone entirely (its manifest
     // could never be re-derived). A disabled instance moves no files, so

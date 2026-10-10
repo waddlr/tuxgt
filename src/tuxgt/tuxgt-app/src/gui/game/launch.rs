@@ -331,6 +331,7 @@ impl Shell {
     /// last committed — never a pending one.
     pub(crate) fn adapter_choice_row(&self, view: Entity<Self>, cx: &App) -> impl IntoElement {
         let current = self.adapter_choice.clone();
+        let vulkan = self.selected_game().and_then(|g| g.api.as_deref()) == Some("vulkan");
         let mk = |adapter: &'static str, id: &'static str| {
             let selected = current == adapter;
             let label = widgets::id_label(widgets::ValKind::Adapter, adapter, &self.strings);
@@ -341,7 +342,13 @@ impl Shell {
             } else {
                 btn.secondary()
             };
-            if selected {
+            // Vulkan games are preload-only: no proxy DLL loads in Vulkan,
+            // so Install dead-ends here (core refuses it too).
+            let install_blocked = vulkan && tuxgt_core::is_install(adapter);
+            btn = btn.disabled(install_blocked);
+            if install_blocked {
+                btn = btn.tooltip(self.strings.get("gui-adapter-vulkan-only-preload"));
+            } else if selected {
                 let help = if tuxgt_core::is_install(adapter) {
                     self.strings.get("gui-adapter-help-install")
                 } else {
@@ -349,9 +356,12 @@ impl Shell {
                 };
                 btn = btn.tooltip(help);
             }
-            btn.on_click(move |_, _, cx| {
-                view.update(cx, |this, cx| this.set_adapter_ui(adapter, false, cx));
-            })
+            if !install_blocked {
+                btn = btn.on_click(move |_, _, cx| {
+                    view.update(cx, |this, cx| this.set_adapter_ui(adapter, false, cx));
+                });
+            }
+            btn
         };
         h_flex()
             .gap_2()

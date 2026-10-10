@@ -357,7 +357,8 @@ pub async fn prewire_game(data_dir: &Path, pool: &SqlitePool, game_id: &str) -> 
     let mut body = Vec::new();
     let api = pick(&row.override_api, &row.detected_api);
     let bitness = pick(&row.override_bitness, &row.detected_bitness);
-    if matches!(api, "dx9" | "dx10" | "dx11" | "dx12" | "opengl") && matches!(bitness, "32" | "64")
+    if matches!(api, "dx9" | "dx10" | "dx11" | "dx12" | "opengl" | "vulkan")
+        && matches!(bitness, "32" | "64")
     {
         body.push(format!("Type={api}_{bitness}"));
     }

@@ -107,6 +107,7 @@ overrides per call.
   claiming dest is already a proxy name, so the GUI can offer a rename back to `<self>`
   (default yes). NVIDIA Streamline, addons, shaders, and textures are never in the list;
   each of their DLLs keeps its own basename. CLI `games adapter` converts the same way (`--slot` fills every named instance); a running store client confirms stop-write-restart;
+- vulkan games are preload-only: no proxy DLL loads in Vulkan, so `install_instance`, `convert_game_adapter` (and the `validate_adapter_convert` dry-run), and `set_game_adapter` refuse the install adapter for effective API `vulkan` before any write (`extra_apis` never gates; unknown API passes). The GUI Install radio disables with the reason;
 - the GUI records each pick before the conversion snapshot, then replays with
   `slots_chosen` true. That replay does not ask again, including when a later
   `NeedConfirm` retries from the Overwrite card (`slots_chosen` stays true). Preload

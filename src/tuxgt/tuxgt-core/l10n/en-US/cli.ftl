@@ -609,6 +609,7 @@ gui-mod-stage-outsync = Out of sync
 gui-adapter-label = Adapter
 gui-adapter-help-preload = Preload via tuxgt-launcher (LoadDLL / IncludeFile). Stock-named ReShade, OptiScaler on dxgi.
 gui-adapter-help-install = Install proxy DLL into the game dir (WINEDLLOVERRIDES). Fallback when preload is unproven.
+gui-adapter-vulkan-only-preload = Vulkan games are preload-only: no proxy DLL loads in Vulkan.
 gui-adapter-status = Adapter { $name } — { $count } Mod(s) converted
 gui-adapter-converting = Converting { $name } for this game…
 gui-adapter-already = Adapter is already { $name }

@@ -67,7 +67,7 @@ Field owners (conflict: owner overwrites; non-owner with a different value → `
 | platform=`proton`/`wine` | `runtime` |
 | build | store snapshot first; PE/engine only if store empty (and only then `detected_build`) |
 
-`api` is the **default**. `extra_apis` is a comma-separated list of other APIs the install also exposes (UE5 DX12 + `-dx11` → `api=dx12`, `extra_apis=dx11`). `dxgi` alone is not an API. UE shipping: ignore `opengl32` unless no D3D/Vulkan is present. `D3D12/D3D12Core.dll` next to the shipping exe ⇒ default `dx12`. No `type` column: loader Type is `"{api}_{bitness}"` when both are `dx9`/`dx10`/`dx11`/`dx12`/`opengl` and `32`/`64`.
+`api` is the **default**. `extra_apis` is a comma-separated list of other APIs the install also exposes (UE5 DX12 + `-dx11` → `api=dx12`, `extra_apis=dx11`). `dxgi` alone is not an API. UE shipping: ignore `opengl32` unless no D3D/Vulkan is present. `D3D12/D3D12Core.dll` next to the shipping exe ⇒ default `dx12`. No `type` column: loader Type is `"{api}_{bitness}"` when both are `dx9`/`dx10`/`dx11`/`dx12`/`opengl`/`vulkan` and `32`/`64`.
 
 Online catalogs (PCGamingWiki, …) are **not** consulted at detect time. See `.agents/docs/plans/detect-catalog.md`.
 

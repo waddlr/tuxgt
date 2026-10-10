@@ -1,4 +1,5 @@
 use super::*;
+use crate::game::{game_adapter, set_game_adapter};
 use crate::testing::{seed_game, SeedGame};
 use crate::Error;
 use sqlx::SqlitePool;
@@ -441,5 +442,116 @@ async fn install_records_provenance_and_update_tracks_local_source() {
         check_update(&data, &cfg, &gid, &iid).await.unwrap(),
         UpdateStatus::UpToDate
     );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+async fn set_api(pool: &SqlitePool, gid: &str, detected: &str, override_api: Option<&str>) {
+    sqlx::query("UPDATE games SET detected_api = ?, override_api = ? WHERE id = ?")
+        .bind(detected)
+        .bind(override_api)
+        .bind(gid)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn vulkan_game_refuses_install_adapter_choice() {
+    let (dir, _data, _cfg, pool, gid, _iid) = local_game("vkset", b"plug-v1").await;
+    // Empty API: legacy behavior, install allowed.
+    set_game_adapter(&pool, &gid, "install").await.unwrap();
+    set_game_adapter(&pool, &gid, "preload").await.unwrap();
+    set_api(&pool, &gid, "vulkan", None).await;
+    let err = set_game_adapter(&pool, &gid, "install").await.unwrap_err();
+    let msg = format!("{err:?}");
+    assert!(matches!(err, Error::InvalidInstance(_)), "{msg}");
+    assert!(msg.contains("vulkan"), "{msg}");
+    assert_eq!(game_adapter(&pool, &gid).await.unwrap(), "preload");
+    // Override gates the same.
+    set_api(&pool, &gid, "dx12", Some("vulkan")).await;
+    assert!(set_game_adapter(&pool, &gid, "install").await.is_err());
+    // extra_apis never gates.
+    sqlx::query("UPDATE games SET detected_extra_apis = 'vulkan' WHERE id = ?")
+        .bind(&gid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    set_api(&pool, &gid, "dx12", None).await;
+    set_game_adapter(&pool, &gid, "install").await.unwrap();
+    assert_eq!(game_adapter(&pool, &gid).await.unwrap(), "install");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn vulkan_game_refuses_install_but_preload_installs() {
+    let (dir, data, cfg, pool, gid, iid) = local_game("vkinst", b"plug-v1").await;
+    set_api(&pool, &gid, "vulkan", None).await;
+    let install_opts = InstallOpts {
+        adapter: Some("install".into()),
+        ..Default::default()
+    };
+    let err = install_instance(&pool, &data, &cfg, &gid, &iid, &install_opts, None)
+        .await
+        .unwrap_err();
+    let msg = format!("{err:?}");
+    assert!(matches!(err, Error::InvalidInstance(_)), "{msg}");
+    assert!(msg.contains("vulkan"), "{msg}");
+    assert!(crate::read_manifest(&data, &gid, &iid).unwrap().is_none());
+    install_instance(
+        &pool,
+        &data,
+        &cfg,
+        &gid,
+        &iid,
+        &InstallOpts::default(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(crate::read_manifest(&data, &gid, &iid).unwrap().is_some());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn vulkan_game_refuses_adapter_conversion() {
+    let (dir, data, cfg, pool, gid, _iid) = local_game("vkconv", b"plug-v1").await;
+    set_api(&pool, &gid, "vulkan", None).await;
+    let err = convert_game_adapter(&pool, &data, &cfg, &gid, "install", true, true)
+        .await
+        .unwrap_err();
+    let msg = format!("{err:?}");
+    assert!(matches!(err, Error::InvalidInstance(_)), "{msg}");
+    assert!(msg.contains("vulkan"), "{msg}");
+    let err = validate_adapter_convert(&pool, &data, &cfg, &gid, "install", true, true)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::InvalidInstance(_)), "{err:?}");
+    assert_eq!(game_adapter(&pool, &gid).await.unwrap(), "preload");
+    convert_game_adapter(&pool, &data, &cfg, &gid, "preload", true, true)
+        .await
+        .unwrap();
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn unknown_game_keeps_precedence_over_vulkan_gate() {
+    let (dir, data, cfg, pool, _gid, iid) = local_game("vkunk", b"plug-v1").await;
+    let missing = "manual:standalone:missing";
+    let err = set_game_adapter(&pool, missing, "install")
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::UnknownGame(_)), "{err:?}");
+    let err = convert_game_adapter(&pool, &data, &cfg, missing, "install", true, true)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::UnknownGame(_)), "{err:?}");
+    let install_opts = InstallOpts {
+        adapter: Some("install".into()),
+        ..Default::default()
+    };
+    let err = install_instance(&pool, &data, &cfg, missing, &iid, &install_opts, None)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::UnknownGame(_)), "{err:?}");
     let _ = fs::remove_dir_all(&dir);
 }

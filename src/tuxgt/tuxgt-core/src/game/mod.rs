@@ -12,7 +12,10 @@ pub(crate) use index::*;
 pub(crate) use migrate::*;
 
 pub(crate) use adapter::restore_game_adapter;
-pub use adapter::{game_adapter, is_install, is_preload, set_game_adapter, validate_adapter};
+pub use adapter::{
+    ensure_install_allowed, game_adapter, game_api, is_install, is_preload, set_game_adapter,
+    validate_adapter,
+};
 pub use adapter::{ADAPTER_INSTALL, ADAPTER_PRELOAD};
 pub use appid::{set_steam_appid, steam_appid_of};
 pub use id::{game_dir, game_rel, GameId, STANDALONE};

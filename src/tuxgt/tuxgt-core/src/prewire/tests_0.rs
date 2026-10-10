@@ -193,6 +193,45 @@ async fn opengl_game_gets_opengl_type() {
 }
 
 #[tokio::test]
+async fn vulkan_game_gets_vulkan_type() {
+    let data = data();
+    let pool = game_pool(&data).await;
+    let exe = data.join("vkgame.exe");
+    fs::write(&exe, b"MZ").unwrap();
+    seed_game(
+        &pool,
+        SeedGame {
+            id: "manual:standalone:ffff0003",
+            manager: "manual",
+            store: "standalone",
+            game_id: "ffff0003",
+            name: Some("t"),
+            exe_path: Some(exe.to_str().unwrap()),
+            detected_api: Some("vulkan"),
+            detected_bitness: Some("64"),
+            ..Default::default()
+        },
+    )
+    .await;
+    crate::write_manifest(
+        &data,
+        &preload_manifest("manual:standalone:ffff0003", "reshade", "preload", true),
+    )
+    .unwrap();
+    prewire_game(&data, &pool, "manual:standalone:ffff0003")
+        .await
+        .unwrap();
+    let gdir = crate::game::game_dir(
+        &data,
+        &crate::game::GameId::parse("manual:standalone:ffff0003").unwrap(),
+    );
+    let text = fs::read_to_string(managed_ini(&gdir)).unwrap();
+    assert!(text.contains("[vkgame]"));
+    assert!(text.contains("Type=vulkan_64"));
+    let _ = fs::remove_dir_all(&data);
+}
+
+#[tokio::test]
 async fn detected_exe_only_gets_section() {
     // Heroic standalone rows often carry no store exe: detectors found it.
     let data = data();
