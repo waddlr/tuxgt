@@ -145,7 +145,7 @@ pub(crate) fn apply_install_dll_overrides(
     Ok(())
 }
 
-/// Proxy slot on any adapter: `dxgi`, `d3d9`, `d3d10`, `d3d11`, `d3d12`, `winmm`, `version`.
+/// Proxy slot on any adapter: `dxgi`, `d3d9`, `d3d10`, `d3d11`, `d3d12`, `opengl32`, `winmm`, `version`.
 /// `<self>` does not parse as a proxy stem, so it adds nothing. Existing
 /// stems win.
 pub(crate) fn apply_proxy_slot_overrides(

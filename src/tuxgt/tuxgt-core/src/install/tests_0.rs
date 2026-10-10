@@ -10,6 +10,7 @@ fn foreign_stems() {
     assert!(foreign_dest("d3d9.dll"));
     assert!(foreign_dest("d3d10.dll"));
     assert!(foreign_dest("D3D12.DLL"));
+    assert!(foreign_dest("opengl32.dll"));
     assert!(foreign_dest("SpecialK.dll"));
     assert!(foreign_dest("sub/winmm.dll"));
     assert!(!foreign_dest("ReShade64.dll"));

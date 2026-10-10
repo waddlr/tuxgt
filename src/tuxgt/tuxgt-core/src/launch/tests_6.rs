@@ -100,6 +100,8 @@ async fn proxy_slot_sets_override_for_preload_and_install() {
     assert!(has_stem(&preload, "dxgi=n,b"), "{preload}");
     let install = overrides("install", &["d3d11.dll"], true, &[]).await;
     assert!(has_stem(&install, "d3d11=n,b"), "{install}");
+    let gl = overrides("install", &["opengl32.dll"], true, &[]).await;
+    assert!(has_stem(&gl, "opengl32=n,b"), "{gl}");
 }
 
 #[tokio::test]

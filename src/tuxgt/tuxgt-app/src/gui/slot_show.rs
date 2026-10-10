@@ -342,6 +342,7 @@ mod tests {
         assert_eq!(menu[1].1, "dxgi");
         assert_eq!(menu[2].1, "d3d9");
         assert_eq!(menu[3].1, "d3d10");
+        assert!(menu.iter().any(|(_, v)| *v == "opengl32"));
         let unknown = slot_menu("", "DLL name");
         assert_eq!(unknown[0].0, "DLL name");
         assert_eq!(unknown[0].1, "<self>");

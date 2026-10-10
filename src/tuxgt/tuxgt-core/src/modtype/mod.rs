@@ -11,6 +11,7 @@ pub enum ProxySlot {
     D3d10,
     D3d11,
     D3d12,
+    Opengl32,
     Winmm,
     Version,
 }
@@ -23,6 +24,7 @@ impl ProxySlot {
             ProxySlot::D3d10 => "d3d10",
             ProxySlot::D3d11 => "d3d11",
             ProxySlot::D3d12 => "d3d12",
+            ProxySlot::Opengl32 => "opengl32",
             ProxySlot::Winmm => "winmm",
             ProxySlot::Version => "version",
         }
@@ -44,6 +46,7 @@ pub fn parse_slot(s: &str) -> Result<ProxySlot> {
         "d3d10" => Ok(ProxySlot::D3d10),
         "d3d11" => Ok(ProxySlot::D3d11),
         "d3d12" => Ok(ProxySlot::D3d12),
+        "opengl32" => Ok(ProxySlot::Opengl32),
         "winmm" => Ok(ProxySlot::Winmm),
         "version" => Ok(ProxySlot::Version),
         _ => Err(Error::InvalidSlot(s.into())),

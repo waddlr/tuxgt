@@ -48,7 +48,7 @@ parse_mod_type(name) -> Result<&dyn ModType>   # unknown (incl. reserved `env_to
 Preload proxy slots are a closed set. Stock-named loads (`ReShade64.dll`) and ASI-install loads (`.asi` via Ultimate ASI Loader) claim **no** slot (`None`) and never conflict.
 
 ```
-ProxySlot: Dxgi | D3d9 | D3d10 | D3d11 | D3d12 | Winmm | Version
+ProxySlot: Dxgi | D3d9 | D3d10 | D3d11 | D3d12 | Opengl32 | Winmm | Version
 parse_slot(s) -> Result<ProxySlot>   # lowercase stem; `.dll` suffix optional; unknown → error
 ```
 

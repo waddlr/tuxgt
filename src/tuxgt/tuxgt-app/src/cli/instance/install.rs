@@ -49,12 +49,12 @@ pub(crate) async fn install_mod_cli(
                 // takes its own install first.
                 if who == instance_id {
                     return Err(format!(
-                        "need proxy slot for {who}; pass --slot <dxgi|d3d9|d3d10|d3d11|d3d12|winmm|version|<self>>"
+                        "need proxy slot for {who}; pass --slot <dxgi|d3d9|d3d10|d3d11|d3d12|opengl32|winmm|version|<self>>"
                     )
                     .into());
                 }
                 return Err(format!(
-                    "need proxy slot for {who}; install it first: tuxgt instance install {game} {who} --slot <dxgi|d3d9|d3d10|d3d11|d3d12|winmm|version|<self>>"
+                    "need proxy slot for {who}; install it first: tuxgt instance install {game} {who} --slot <dxgi|d3d9|d3d10|d3d11|d3d12|opengl32|winmm|version|<self>>"
                 )
                 .into());
             }

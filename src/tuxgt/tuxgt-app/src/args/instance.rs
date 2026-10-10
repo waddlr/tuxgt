@@ -76,7 +76,7 @@ pub(crate) enum InstanceCmd {
         key: Option<String>,
     },
     /// Rewrite the claiming Load dest to `<self>` or a proxy slot
-    /// (dxgi, d3d9, d3d10, d3d11, d3d12, winmm, version)
+    /// (dxgi, d3d9, d3d10, d3d11, d3d12, opengl32, winmm, version)
     Slot {
         game: String,
         instance: String,

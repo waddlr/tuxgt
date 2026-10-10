@@ -8,8 +8,8 @@ use crate::{Error, Result};
 /// Dest stems that need confirm before a game-dir overwrite (APP.md §7.3
 /// foreign-DLL rule). Compared lowercased, sans `.dll`.
 pub(crate) const FOREIGN_STEMS: &[&str] = &[
-    "dxgi", "d3d9", "d3d10", "d3d11", "d3d12", "dxvk", "d8", "d9", "enb", "specialk", "vkd3d",
-    "winmm", "version",
+    "dxgi", "d3d9", "d3d10", "d3d11", "d3d12", "opengl32", "dxvk", "d8", "d9", "enb", "specialk",
+    "vkd3d", "winmm", "version",
 ];
 
 /// Prefix-dest marker: `pfx:windows/system32/<file>` and
@@ -60,7 +60,7 @@ pub fn prefix_rel(dest: &str) -> Result<String> {
 }
 
 /// Validate every `pfx:` dest in one install set: shape, forbidden proxy
-/// stems (existing `FOREIGN_STEMS` incl. `dxgi`/`d3d9`/`d3d10`/`d3d11`/`d3d12`), and the
+/// stems (existing `FOREIGN_STEMS` incl. `dxgi`/`d3d9`/`d3d10`/`d3d11`/`d3d12`/`opengl32`), and the
 /// install-only rule (never preload). Non-`pfx:` dests are untouched.
 pub fn validate_prefix_dests<'a>(
     dests: impl Iterator<Item = &'a str>,

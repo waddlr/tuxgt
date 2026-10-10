@@ -219,6 +219,8 @@ fn slots_parse_closed() {
     assert_eq!(parse_slot("d3d9").unwrap(), ProxySlot::D3d9);
     assert_eq!(parse_slot("d3d10.dll").unwrap(), ProxySlot::D3d10);
     assert_eq!(parse_slot("d3d12").unwrap(), ProxySlot::D3d12);
+    assert_eq!(parse_slot("opengl32").unwrap(), ProxySlot::Opengl32);
+    assert_eq!(parse_slot("OPENGL32.DLL").unwrap(), ProxySlot::Opengl32);
     assert!(parse_slot("dinput8").is_err());
     assert!(parse_slot("").is_err());
 }
@@ -228,6 +230,7 @@ fn slot_dll_normalizes_stem() {
     assert_eq!(slot_dll("dxgi").unwrap(), "dxgi.dll");
     assert_eq!(slot_dll("winmm.dll").unwrap(), "winmm.dll");
     assert_eq!(slot_dll("D3D12.DLL").unwrap(), "d3d12.dll");
+    assert_eq!(slot_dll("opengl32").unwrap(), "opengl32.dll");
     assert!(slot_dll("dinput8").is_err());
 }
 

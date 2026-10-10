@@ -145,7 +145,7 @@ async fn consent_convert(
             }
             Err(Error::NeedSlotChoice(msg)) => {
                 return Err(format!(
-                    "need proxy slot for {}; pass --slot <dxgi|d3d9|d3d10|d3d11|d3d12|winmm|version|<self>>",
+                    "need proxy slot for {}; pass --slot <dxgi|d3d9|d3d10|d3d11|d3d12|opengl32|winmm|version|<self>>",
                     msg_items(&msg).join(", ")
                 )
                 .into());
