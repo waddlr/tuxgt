@@ -83,6 +83,50 @@ async fn scope_lists_installed_games_with_flags() {
 }
 
 #[tokio::test]
+async fn scope_all_covers_every_library_game() {
+    let dir = scope_dir("all");
+    let data = dir.join("data");
+    let cfg = dir.join("config");
+    let pool = crate::open_db(&data).await.unwrap();
+    // Library rows (one hidden, one unnamed); manifests only in two.
+    for (gid, name, hidden) in [
+        ("manual:standalone:s-a", Some("S Game"), None),
+        ("manual:standalone:s-b", Some("Hidden Game"), Some(1)),
+        ("manual:standalone:s-c", None, None),
+    ] {
+        seed_game(
+            &pool,
+            SeedGame {
+                id: gid,
+                manager: "manual",
+                name,
+                override_hidden: hidden,
+                ..Default::default()
+            },
+        )
+        .await;
+    }
+    for gid in [
+        "manual:standalone:s-a",
+        "manual:standalone:s-b",
+        "manual:standalone:s-c",
+    ] {
+        crate::write_manifest(&data, &manifest(gid, "pack", "preload", true, vec![])).unwrap();
+    }
+    // No games list passed: the scan sources the library index itself,
+    // so page state (Settings holds no game rows) cannot empty it.
+    let hits = install_scope_all(&pool, &cfg, &data, "pack").await.unwrap();
+    assert_eq!(hits.len(), 3);
+    assert_eq!(hits[0].game, "manual:standalone:s-b");
+    assert_eq!(hits[0].name, "Hidden Game");
+    assert_eq!(hits[1].game, "manual:standalone:s-a");
+    assert_eq!(hits[1].name, "S Game");
+    // Unnamed game falls back to its id for the display name.
+    assert_eq!(hits[2].game, "manual:standalone:s-c");
+    assert_eq!(hits[2].name, "manual:standalone:s-c");
+}
+
+#[tokio::test]
 async fn scope_reports_foreign_and_required_by() {
     let dir = scope_dir("foreign");
     let data = dir.join("data");

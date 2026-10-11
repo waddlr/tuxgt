@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use super::super::super::settings::{AppUpdate, FanoutDisableChoice};
+use super::super::super::settings::AppUpdate;
 use super::super::super::*;
 use super::super::*;
 use super::controller::Ctx;
@@ -254,8 +254,6 @@ pub(super) fn build_window(ctx: &Ctx, cx: &mut App) -> Option<LiveWindow> {
                 custom_env_adding: false,
                 redetect_confirm: false,
                 manual_remove: None,
-                fanout_remove_games: true,
-                fanout_disable_choice: FanoutDisableChoice::default(),
                 pending_confirm: None,
                 mods_picker_open: false,
                 picker_checked: Vec::new(),

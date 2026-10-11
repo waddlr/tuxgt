@@ -11,15 +11,22 @@ use tuxgt_core::{
 
 use super::super::{load_catalog_meta, rt_block, widgets, Shell};
 use super::fanout_ui::{
-    fanout_dialog, FanoutAction, FanoutControl, FanoutDialog, FanoutDisableChoice, FanoutReport,
+    fanout_dialog, FanoutAction, FanoutControl, FanoutControlState, FanoutDialog,
+    FanoutDisableChoice, FanoutReport,
 };
 
 /// The scope radios: glyph + label rows, click to pick (the kit has no
-/// Radio component). Controlled by `Shell::fanout_disable_choice`,
-/// rebuilt live on every dialog render.
-fn disable_choice_control(labels: [String; 3]) -> FanoutControl {
+/// Radio component). Controlled by its own entity (reading Shell here
+/// would panic inside `Shell::render`), rebuilt live on every dialog
+/// render; the Shell view only repaints on change.
+fn disable_choice_control(
+    labels: [String; 3],
+    control: Entity<FanoutControlState>,
+) -> FanoutControl {
     Box::new(move |view: Entity<Shell>, cx: &mut App| {
-        let current = view.read(cx).fanout_disable_choice;
+        let current = control
+            .read(cx)
+            .disable_or(FanoutDisableChoice::CatalogOnly);
         let rows = [
             (
                 FanoutDisableChoice::CatalogOnly,
@@ -42,15 +49,16 @@ fn disable_choice_control(labels: [String; 3]) -> FanoutControl {
             .children(rows.into_iter().map(|(choice, id, label)| {
                 let glyph = if current == choice { "●" } else { "○" };
                 let row_view = view.clone();
+                let writer = control.clone();
                 h_flex()
                     .id(SharedString::from(id))
                     .gap_2()
                     .cursor_pointer()
                     .on_click(move |_, _, cx| {
-                        row_view.update(cx, |this, cx| {
-                            this.fanout_disable_choice = choice;
-                            cx.notify();
+                        writer.update(cx, |state, _| {
+                            *state = FanoutControlState::Disable(choice);
                         });
+                        row_view.update(cx, |_, cx| cx.notify());
                     })
                     .child(widgets::mono(glyph, cx))
                     .child(widgets::blabel(label, cx))
@@ -109,7 +117,7 @@ impl Shell {
             self.flip_offered_ui(id, false, cx);
             return;
         }
-        self.fanout_disable_choice = FanoutDisableChoice::CatalogOnly;
+        let control = cx.new(|_| FanoutControlState::Disable(FanoutDisableChoice::CatalogOnly));
         let name = self.fanout_mod_label(&id);
         let title = self.fanout_message(
             "gui-note-fanout-disable-one",
@@ -140,6 +148,7 @@ impl Shell {
             "fanout-disable-yes",
             "fanout-disable-no",
             FanoutAction::DisableYes { id, games },
+            control.clone(),
         );
         fanout_dialog(
             cx.entity(),
@@ -149,7 +158,7 @@ impl Shell {
                 title,
                 lines,
                 warns,
-                control: Some(disable_choice_control(labels)),
+                control: Some(disable_choice_control(labels, control)),
                 buttons,
             },
         );

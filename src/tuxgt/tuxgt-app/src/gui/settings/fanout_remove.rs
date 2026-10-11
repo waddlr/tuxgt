@@ -9,13 +9,17 @@ use tuxgt_core::{
 };
 
 use super::super::{load_catalog_meta, rt_block, widgets, Shell};
-use super::fanout_ui::{fanout_dialog, FanoutAction, FanoutControl, FanoutDialog, FanoutReport};
+use super::fanout_ui::{
+    fanout_dialog, FanoutAction, FanoutControl, FanoutControlState, FanoutDialog, FanoutReport,
+};
 
-/// The also-remove checkbox: controlled by `Shell::fanout_remove_games`,
-/// rebuilt live on every dialog render.
-fn remove_games_control(label: String) -> FanoutControl {
+/// The also-remove checkbox: controlled by its own entity (reading
+/// Shell here would panic inside `Shell::render`), rebuilt live on
+/// every dialog render; the Shell view only repaints on change.
+fn remove_games_control(label: String, control: Entity<FanoutControlState>) -> FanoutControl {
     Box::new(move |view: Entity<Shell>, cx: &mut App| {
-        let checked = view.read(cx).fanout_remove_games;
+        let checked = control.read(cx).remove_or(true);
+        let writer = control.clone();
         h_flex()
             .gap_2()
             .child(
@@ -24,10 +28,8 @@ fn remove_games_control(label: String) -> FanoutControl {
                     .accessibility_label(label.clone())
                     .on_change(move |val, _, cx| {
                         let on = *val;
-                        view.update(cx, |this, cx| {
-                            this.fanout_remove_games = on;
-                            cx.notify();
-                        });
+                        writer.update(cx, |state, _| *state = FanoutControlState::Remove(on));
+                        view.update(cx, |_, cx| cx.notify());
                     }),
             )
             .child(widgets::blabel(label.clone(), cx))
@@ -59,7 +61,7 @@ impl Shell {
             self.remove_instance_ui(id, cx);
             return;
         }
-        self.fanout_remove_games = true;
+        let control = cx.new(|_| FanoutControlState::Remove(true));
         let name = self.fanout_mod_label(&id);
         let title = self.fanout_message(
             "gui-note-fanout-remove-one",
@@ -84,6 +86,7 @@ impl Shell {
                 uninstall: vec![(id.clone(), games)],
                 remove: vec![id],
             },
+            control.clone(),
         );
         fanout_dialog(
             cx.entity(),
@@ -93,7 +96,7 @@ impl Shell {
                 title,
                 lines,
                 warns,
-                control: Some(remove_games_control(check)),
+                control: Some(remove_games_control(check, control)),
                 buttons,
             },
         );
@@ -126,7 +129,7 @@ impl Shell {
             self.confirm_remove_visible_plain(ids, window, cx);
             return;
         }
-        self.fanout_remove_games = true;
+        let control = cx.new(|_| FanoutControlState::Remove(true));
         let title = self.strings.get("gui-note-fanout-visible");
         let mut lines = Vec::new();
         let mut warns = Vec::new();
@@ -152,6 +155,7 @@ impl Shell {
                 uninstall,
                 remove: ids,
             },
+            control.clone(),
         );
         fanout_dialog(
             cx.entity(),
@@ -161,7 +165,7 @@ impl Shell {
                 title,
                 lines: capped,
                 warns,
-                control: Some(remove_games_control(check)),
+                control: Some(remove_games_control(check, control)),
                 buttons,
             },
         );

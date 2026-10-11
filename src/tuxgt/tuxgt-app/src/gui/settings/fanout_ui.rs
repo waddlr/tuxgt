@@ -3,7 +3,7 @@ use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, WindowExt as _};
 use gpui_kit::*;
 
 use super::super::theme::{types, TypeStyled as _};
-use super::super::{rt_block, widgets, Shell};
+use super::super::{load_index, rt_block, widgets, Shell};
 
 /// Cap for game/warning rows in a fan-out dialog; the rest fold into
 /// one `+ N more` row (same 10-cap as the Details disclosure).
@@ -34,9 +34,35 @@ pub(crate) enum FanoutDisableChoice {
 }
 
 /// A dialog control (checkbox, radios) built per render: Root stores the
-/// builder closure and re-runs it on notify, so the control reads live
-/// Shell state through the view.
+/// builder closure and re-runs it on notify. The builder runs inside
+/// `Shell::render`, where reading Shell panics (landmine 12), so the
+/// control reads its own entity; the Shell view only repaints on change.
 pub(crate) type FanoutControl = Box<dyn Fn(Entity<Shell>, &mut App) -> AnyElement + 'static>;
+
+/// One open dialog's control state, in its own entity for the reason
+/// above. Built at dialog open with the settled default (remove:
+/// checked; disable: no game changes); Yes reads it back.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FanoutControlState {
+    Remove(bool),
+    Disable(FanoutDisableChoice),
+}
+
+impl FanoutControlState {
+    pub(crate) fn remove_or(self, default: bool) -> bool {
+        match self {
+            Self::Remove(on) => on,
+            Self::Disable(_) => default,
+        }
+    }
+
+    pub(crate) fn disable_or(self, default: FanoutDisableChoice) -> FanoutDisableChoice {
+        match self {
+            Self::Disable(choice) => choice,
+            Self::Remove(_) => default,
+        }
+    }
+}
 
 /// One fan-out dialog button: the stashed action runs when clicked. Yes
 /// actions read the dialog's control state live; No only closes.
@@ -70,6 +96,9 @@ pub(crate) struct FanoutButton {
     pub(crate) label: String,
     pub(crate) style: FanoutStyle,
     pub(crate) action: FanoutAction,
+    /// The dialog's control entity for Yes-with-control buttons; `None`
+    /// for No and the control-less restore buttons.
+    pub(crate) control: Option<Entity<FanoutControlState>>,
 }
 
 /// Content for one Settings fan-out dialog: the question, game rows,
@@ -83,8 +112,9 @@ pub(crate) struct FanoutDialog {
     pub buttons: Vec<FanoutButton>,
 }
 
-/// Open one fan-out dialog. The builder re-runs on notify, so the
-/// control reads live Shell state through the view.
+/// Open one fan-out dialog. The builder re-runs on notify; the
+/// control reads its own entity (never Shell: this runs inside
+/// `Shell::render`).
 pub(crate) fn fanout_dialog(
     view: Entity<Shell>,
     window: &mut Window,
@@ -129,48 +159,66 @@ fn fanout_button(view: Entity<Shell>, b: FanoutButton, cx: &mut App) -> impl Int
             return;
         }
         let action = b.action.clone();
+        let control = b.control.clone();
         view.update(cx, |this, cx| {
-            this.fanout_dispatch(action, cx);
+            this.fanout_dispatch(action, control, cx);
         });
     })
 }
 
 impl Shell {
-    /// The library index as (game id, display name) pairs for scope scans.
+    /// The library index as (game id, display name) pairs for display
+    /// names in dialogs and run reports. A fresh read, never `self.games`:
+    /// those rows are page-scoped (Settings holds none), so reading them
+    /// would silently empty every fan-out below. Empty on read error; every
+    /// caller falls back to the game id.
     pub(crate) fn fanout_games(&self) -> Vec<(String, String)> {
-        self.games
-            .iter()
+        load_index()
+            .into_iter()
             .map(|g| (g.id.clone(), g.display_name().to_string()))
             .collect()
     }
 
     /// Synchronous scope scan for one mod (UI thread, like the catalog
-    /// meta load): manifests plus required-by plus foreign checks.
+    /// meta load): manifests plus required-by plus foreign checks. The
+    /// games come from the DB index inside `install_scope_all`, never
+    /// from page state. A read error aborts the consent; it never misreads
+    /// as not-installed.
     pub(crate) fn fanout_scope_sync(
         &self,
         mod_id: &str,
     ) -> tuxgt_core::Result<Vec<tuxgt_core::ScopeHit>> {
-        let games = self.fanout_games();
         let id = mod_id.to_string();
         rt_block(async move {
             let data = tuxgt_core::data_dir();
             let pool = tuxgt_core::open_db_shared(&data).await?;
-            tuxgt_core::install_scope(&pool, &tuxgt_core::config_dir(), &data, &games, &id).await
+            tuxgt_core::install_scope_all(&pool, &tuxgt_core::config_dir(), &data, &id).await
         })
     }
 
     /// Run the stashed fan-out action from a dialog Yes button. The
-    /// dialog's control state (checkbox, radio) is read live.
-    pub(crate) fn fanout_dispatch(&mut self, action: FanoutAction, cx: &mut Context<Self>) {
+    /// dialog's control state (checkbox, radio) is read live from its
+    /// entity; a missing or mismatched state falls back to the dialog's
+    /// settled default (remove: everywhere; disable: catalog-only).
+    pub(crate) fn fanout_dispatch(
+        &mut self,
+        action: FanoutAction,
+        control: Option<Entity<FanoutControlState>>,
+        cx: &mut Context<Self>,
+    ) {
         match action {
             FanoutAction::RemoveYes { uninstall, remove } => {
-                if self.fanout_remove_games {
+                let everywhere = control.map(|c| c.read(cx).remove_or(true)).unwrap_or(true);
+                if everywhere {
                     self.fanout_remove_everywhere_ui(uninstall, remove, cx);
                 } else {
                     self.fanout_catalog_only_remove(remove, cx);
                 }
             }
-            FanoutAction::DisableYes { id, games } => match self.fanout_disable_choice {
+            FanoutAction::DisableYes { id, games } => match control
+                .map(|c| c.read(cx).disable_or(FanoutDisableChoice::CatalogOnly))
+                .unwrap_or(FanoutDisableChoice::CatalogOnly)
+            {
                 FanoutDisableChoice::CatalogOnly => {
                     self.flip_offered_ui(id, false, cx);
                 }
@@ -217,13 +265,15 @@ impl Shell {
         capped
     }
 
-    /// The shared Yes / No cluster. Yes carries the stashed scope and
-    /// reads the dialog's control state live; No only closes.
+    /// The shared Yes / No cluster. Yes carries the stashed scope plus
+    /// the dialog's control entity and reads the control state live; No
+    /// only closes.
     pub(crate) fn fanout_yes_no_buttons(
         &self,
         yes_id: &str,
         no_id: &str,
         yes: FanoutAction,
+        control: Entity<FanoutControlState>,
     ) -> Vec<FanoutButton> {
         vec![
             FanoutButton {
@@ -231,12 +281,14 @@ impl Shell {
                 label: self.strings.get("gui-action-yes"),
                 style: FanoutStyle::Primary,
                 action: yes,
+                control: Some(control),
             },
             FanoutButton {
                 id: no_id.to_string(),
                 label: self.strings.get("gui-action-no"),
                 style: FanoutStyle::Ghost,
                 action: FanoutAction::No,
+                control: None,
             },
         ]
     }

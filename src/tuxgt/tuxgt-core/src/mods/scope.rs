@@ -71,6 +71,24 @@ pub async fn install_scope(
     Ok(out)
 }
 
+/// Library-wide install scope: the games come from the DB index, not
+/// from caller-held page state (the Settings page holds no game rows,
+/// so passing those would silently scan nothing). Hidden games are
+/// included: hidden is a display flag, the installs are real.
+pub async fn install_scope_all(
+    pool: &SqlitePool,
+    config_dir: &Path,
+    data_dir: &Path,
+    mod_id: &str,
+) -> Result<Vec<ScopeHit>> {
+    let games: Vec<(String, String)> = crate::list_game_index(pool)
+        .await?
+        .into_iter()
+        .map(|g| (g.id.clone(), g.display_name().to_string()))
+        .collect();
+    install_scope(pool, config_dir, data_dir, &games, mod_id).await
+}
+
 /// Installed instances in `game` whose recipe requires `mod_id`.
 fn required_by(catalog: &[crate::Mod], manifests: &[FileManifest], mod_id: &str) -> Vec<String> {
     let mut out: Vec<String> = manifests

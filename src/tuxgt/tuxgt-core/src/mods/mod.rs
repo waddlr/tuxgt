@@ -42,8 +42,8 @@ pub use provide::{
     ProvideReport, ProvidedFiles,
 };
 pub use scope::{
-    install_scope, plan_bulk_restore, set_enabled_in_games, uninstall_in_games, FanoutResult,
-    RestorePlan, ScopeHit, SkipReason,
+    install_scope, install_scope_all, plan_bulk_restore, set_enabled_in_games, uninstall_in_games,
+    FanoutResult, RestorePlan, ScopeHit, SkipReason,
 };
 pub use slot::{
     apply_slot_picks, convert_after_unplace, default_slot_for_api, ensure_repick_free,
