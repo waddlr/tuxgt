@@ -56,7 +56,7 @@ games/<l1>/<l2>/runtime/               # per-game loader dest (what the game see
 games/<l1>/<l2>/manifests/<instance>.toml
 ```
 
-`make prepare` and `make package` never copy payload dirs — only the recipes. `make deploy` syncs the official recipes into the live prefix: it writes/updates each shipped `*.toml` and deletes any official `*.toml` that left the package together with its payload dir; it never touches `mods/user/`, `games/`, `downloads/`, or payload dirs of still-shipped officials.
+`make prepare` and `make package` never copy payload dirs — only the recipes. `make deploy` applies the prepared tree's tarball via `update --from`: it writes/updates each shipped `*.toml` and drops tracked officials that left the package together with their payload dir (any such official on a legacy prefix without a manifest); it never touches `mods/user/`, `games/`, `downloads/` (except the update scratch, empty at rest), or payload dirs of still-shipped officials.
 
 ## Add a custom pack
 

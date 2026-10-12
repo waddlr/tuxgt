@@ -81,17 +81,15 @@ tar -tzf dist/tuxgt.tar.gz | head
 make deploy
 ```
 
-Live-prefix overlay for day-to-day hacking. Depends on `prepare`, then copies the prepared tree into the live prefix `$$pfx` taken from `~/.config/tuxgt.conf` (`TUXGT_DATA` — the same conf written by `tuxgt install`). If the conf is missing, empty, or `TUXGT_DATA=/`, it errors with "run `tuxgt install` first".
+Live-prefix deploy for day-to-day hacking. Depends on `prepare`, then tarballs the prepared tree and applies it into the live prefix `$$pfx` taken from `~/.config/tuxgt.conf` (`TUXGT_DATA` — the same conf written by `tuxgt install`) via the staged binary's `tuxgt update --from <tarball> --tag v<workspace version> --prefix $$pfx --yes` — the `install.sh` mechanism. If the conf is missing, empty, or `TUXGT_DATA=/`, it errors with "run `tuxgt install` first"; a prefix without `bin/tuxgt` is refused by `update --from`.
 
-What it syncs (as the Makefile's `CONF_PFX` loop does):
+What it syncs (the `update --from` owned-file overlay, manifest-tracked in `$PREFIX/config/prefix-manifest.toml`):
 
-- `bin/tuxgt`, `bin/tuxgt-launcher`, `lib/libtuxgt-launcher.so`, `share/protonfixes/*`, `share/templates/*.toml`, `share/icons/...` — always.
-- `share/applications/tuxgt.desktop` — only if missing (does not overwrite your desktop file).
-- `mods/official/*.toml` — write/update each shipped recipe; delete any `$PREFIX/mods/official/*.toml` that left the package together with its payload dir `$PREFIX/mods/official/<id>/` where it exists.
+- `bin/*`, `lib/*.so`, `share/**` (protonfixes, templates, icons, applications) — per-file atomic; the overlay writes `share/applications/tuxgt.desktop` only if missing, then the host refresh rewrites its `Exec=` for the prefix.
+- `mods/official/*.toml` — write/update each shipped recipe; tracked officials that left the package drop their toml together with the payload dir `$PREFIX/mods/official/<id>/` (on a legacy prefix without a manifest, any such official drops); stale owned files recorded in the previous manifest also drop.
+- Host files refresh as the new binary (`install --prefix $PREFIX --yes`): PATH/desktop symlinks, themed icons, and the protonfixes `localfixes` shims; this also settles `$PREFIX/config/host-install.toml`.
 
-What it never touches: `games/`, `downloads/`, `config/` (so `config/tuxgt.sqlite` and your index stay), `mods/user/`, any registry under `mods/<registry>/`, or payload dirs of still-shipped officials. Host files under `~/.local/` and `~/.config/` are not written by `deploy` — that is `tuxgt install`'s job.
-
-After `deploy`, run `tuxgt install --check` if you want to verify host symlinks/icons.
+What it never touches: `games/`, `downloads/` (except the update scratch, empty at rest), `config/` except `prefix-manifest.toml` and `host-install.toml` (so `config/tuxgt.sqlite` and your index stay), `mods/user/`, any registry under `mods/<registry>/`, or payload dirs of still-shipped officials.
 
 ### Other targets
 

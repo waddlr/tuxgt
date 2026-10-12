@@ -6,9 +6,9 @@ No Flatpak, no AppImage, no `/usr`, no sudo.
 
 Ship `dist/tuxgt.tar.gz` (`make package`): unpacks to a self-contained `tuxgt/` tree. Then `tuxgt/bin/tuxgt install` writes the two PATH symlinks, one KDE Games desktop entry, and `~/.config/tuxgt.conf` (boot pointer only). Interactive when a terminal is present (default `$HOME/tuxgt`, `--prefix` skips the prompt, `--yes` accepts the default).
 
-The tarball is the app + launcher + share (`share/templates/*.toml` Add templates, `share/protonfixes/`, `share/icons/hicolor/*/apps/tuxgt.png` (9 sizes)) + official recipe TOMLs at `mods/official/*.toml`. **No payload mods:** no ReShade, no NVStreamline, no first-party `.addon64` binaries. Empty `mods/` / `downloads/` / `config/` / `games/` dirs may exist for layout. `make prepare` fills `build/pkg/tuxgt` from repo files + our artifacts; `package` tars it; `deploy` overlays from it. Neither requires mingw or the addons. ReShade is a runtime download (`docs/dev/app/core/mods.md`, official `reshade` Mod). Payload dirs `mods/official/<id>/` are created on first install, not in the tarball.
+The tarball is the app + launcher + share (`share/templates/*.toml` Add templates, `share/protonfixes/`, `share/icons/hicolor/*/apps/tuxgt.png` (9 sizes)) + official recipe TOMLs at `mods/official/*.toml`. **No payload mods:** no ReShade, no NVStreamline, no first-party `.addon64` binaries. Empty `mods/` / `downloads/` / `config/` / `games/` dirs may exist for layout. `make prepare` fills `build/pkg/tuxgt` from repo files + our artifacts; `package` tars it; `deploy` tarballs it and applies it via `update --from`. Neither requires mingw or the addons. ReShade is a runtime download (`docs/dev/app/core/mods.md`, official `reshade` Mod). Payload dirs `mods/official/<id>/` are created on first install, not in the tarball.
 
-`make deploy` overlays **this tree's build** into the live prefix (`TUXGT_DATA` from `~/.config/tuxgt.conf`): `bin/tuxgt`, `bin/tuxgt-launcher`, `lib/libtuxgt-launcher.so`, `share/protonfixes/`, `share/` (desktop file only if missing; `share/templates/*.toml` + `share/icons/` always). Official recipe TOMLs: write/update `$PREFIX/mods/official/*.toml`; delete PREFIX official tomls that left the package **and** drop matching `mods/official/<id>/`. It does not touch `games/`, `downloads/`, `config/`, `mods/user/`, registries, or payload dirs of still-shipped officials. It does not copy payload mods and does not require mingw. Missing conf or empty `TUXGT_DATA` → error (`tuxgt install` first). Not `tuxgt install`; no `make install`.
+`make deploy` tarballs **this tree's build** and applies it into the live prefix (`TUXGT_DATA` from `~/.config/tuxgt.conf`) via the staged binary's `tuxgt update --from <tarball> --tag v<workspace version> --prefix $PREFIX --yes` — the `install.sh` mechanism (`app.self-update` local mode). The owned-file overlay is manifest-tracked: `bin/`, `lib/`, `share/`, `mods/official/*.toml` land per-file atomic (the overlay writes `share/applications/tuxgt.desktop` only when missing, then the host refresh rewrites its `Exec=` for the prefix; tracked gone officials drop toml + payload dir — on a legacy prefix without a manifest, any such official drops; stale owned files from `$PREFIX/config/prefix-manifest.toml` drop), then host files refresh as the new binary (`install --prefix $PREFIX --yes`, which also settles `$PREFIX/config/host-install.toml`). It does not touch `games/`, `downloads/` (except the update scratch, empty at rest), `config/` (except `prefix-manifest.toml` and `host-install.toml`), `mods/user/`, registries, or payload dirs of still-shipped officials. It does not copy payload mods and does not require mingw. Missing conf or empty `TUXGT_DATA` → error (`tuxgt install` first); a prefix without `bin/tuxgt` is refused by `update --from`. Not `tuxgt install`; no `make install`.
 
 Local-test payloads only (not the tarball). Same conf path. Missing conf → same error.
 
@@ -58,11 +58,11 @@ Only host files outside PREFIX: `~/.local/bin/tuxgt`, `~/.local/bin/tuxgt-launch
 
 | Path | Writer | Launch |
 |---|---|---|
-| `$PREFIX/share/protonfixes/*` | `tuxgt install` (baked `include_str` in the **binary**) and `make deploy` (**repo** `src/protonfixes-hook/`) | `tuxgt_apply.py` is the correlator + session apply |
-| `~/.config/protonfixes/localfixes/tuxgt.py` | `tuxgt install` only | Shim: `sys.path` ← prefix `share/protonfixes`, `from tuxgt_apply import apply` |
-| `localfixes/default.py` | `tuxgt install` only | Protonfixes entry. Marker `tuxgt-proton-hook v1` → overwrite from baked copy. Else wrap: foreign file → `_tuxgt_wrapped_default.py` once |
+| `$PREFIX/share/protonfixes/*` | `tuxgt install` (baked `include_str` in the **binary**) and `make deploy` (tarball **repo** `src/protonfixes-hook/`, via `update --from`) | `tuxgt_apply.py` is the correlator + session apply |
+| `~/.config/protonfixes/localfixes/tuxgt.py` | `tuxgt install` and `make deploy` (via `update --from`'s host refresh) | Shim: `sys.path` ← prefix `share/protonfixes`, `from tuxgt_apply import apply` |
+| `localfixes/default.py` | `tuxgt install` and `make deploy` (via `update --from`'s host refresh) | Protonfixes entry. Marker `tuxgt-proton-hook v1` → overwrite from baked copy. Else wrap: foreign file → `_tuxgt_wrapped_default.py` once |
 
-`make deploy` then `tuxgt install` can revert prefix `share/protonfixes/` to the last Cargo bake. Day-to-day `tuxgt_apply.py` work: `make deploy` only. Stub/shim refresh: `tuxgt install` after a rebuild.
+`make deploy` lands prefix `share/protonfixes/` from the tarball's repo copy and refreshes the `localfixes` shims from the new binary's bake in the same run. Day-to-day `tuxgt_apply.py` work: `make deploy` only.
 
 ### Host inventory + verify + reconcile
 
@@ -173,7 +173,8 @@ file through the same unpack → overlay → manifest → host-refresh
 order (same confirm rules; `--from` needs `--tag`, refuses
 `--check`). `install.sh` keeps its own curl/wget fetch and updates
 via the staged binary's `update --from`, so it never executes the
-old installed bytes. GUI apply drops the `app:<tag>`
+old installed bytes. `make deploy` does the same with the prepared
+tree's tarball and the workspace version as the tag. GUI apply drops the `app:<tag>`
 Attention card as soon as Update is clicked (action taken), opens a
 Live card for fetch progress with Cancel (About morphs to Cancel too),
 and restores `Available` plus the Attention card on cancel or failure.

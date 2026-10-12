@@ -92,12 +92,16 @@ pub fn apply_local_update(prefix: &Path, tag: &str, asset: &Path) -> Result<AppU
             asset.display()
         )));
     }
+    // `unpack` extracts with the scratch dir as cwd, so a relative
+    // `--from` would resolve under it. Pin the tarball to an absolute
+    // path before handing it over.
+    let asset = std::fs::canonicalize(asset)?;
     let scratch = prefix
         .join("downloads")
         .join(format!(".update-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
     std::fs::create_dir_all(&scratch)?;
-    let out = apply_unpacked(prefix, tag, asset, &scratch);
+    let out = apply_unpacked(prefix, tag, &asset, &scratch);
     let _ = std::fs::remove_dir_all(&scratch);
     out
 }

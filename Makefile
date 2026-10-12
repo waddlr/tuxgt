@@ -138,39 +138,25 @@ package: prepare
 	gzip -n -f $(CURDIR)/dist/tuxgt.tar
 	@echo "packaged dist/tuxgt.tar.gz"
 
-# Developer overlay: refresh bin/lib/share from the prepared tree into the
-# live PREFIX. Official recipe TOMLs are synced (write/update; gone ids drop
-# the toml and that id's payload dir). Never touches games/, downloads/,
-# config/, mods/user/, registries, or payload dirs of still-shipped officials.
+# Developer deploy: tarball the prepared tree and apply it into the live
+# PREFIX via the staged binary's `update --from` (the `install.sh`
+# mechanism): manifest-tracked owned-file overlay (bin/lib/share +
+# mods/official/*.toml; tracked gone ids drop toml + payload dir) plus a
+# host refresh as the new binary. Never touches games/, mods/user/,
+# registries, or kept official payloads; inside config/ only the
+# prefix manifest and host inventory settle. The tag is scraped in
+# release.sh's exact `version = "X.Y.Z"` format (empty fails loud).
 deploy: prepare
 	@$(CONF_PFX); \
-	install -d "$$pfx/bin" "$$pfx/lib" "$$pfx/share/applications" \
-		"$$pfx/share/templates" "$$pfx/share/protonfixes" "$$pfx/mods/official"; \
-	install -m755 $(PREPARE)/bin/tuxgt "$$pfx/bin/tuxgt"; \
-	install -m755 $(PREPARE)/bin/tuxgt-launcher "$$pfx/bin/tuxgt-launcher"; \
-	install -m755 $(PREPARE)/lib/libtuxgt-launcher.so "$$pfx/lib/libtuxgt-launcher.so"; \
-	if [ -f "$(PREPARE)/lib/libtuxgt-launcher32.so" ]; then install -m755 "$(PREPARE)/lib/libtuxgt-launcher32.so" "$$pfx/lib/libtuxgt-launcher32.so"; fi; \
-	install -m644 $(PREPARE)/share/protonfixes/* "$$pfx/share/protonfixes/"; \
-	for s in 16 24 32 48 64 128 256 512 1024; do \
-		install -d "$$pfx/share/icons/hicolor/$${s}x$${s}/apps"; \
-		install -m644 $(PREPARE)/share/icons/hicolor/$${s}x$${s}/apps/tuxgt.png "$$pfx/share/icons/hicolor/$${s}x$${s}/apps/tuxgt.png"; \
-	done; \
-	install -m644 $(PREPARE)/mods/official/*.toml "$$pfx/mods/official/"; \
-	for f in "$$pfx/mods/official"/*.toml; do \
-		[ -f "$$f" ] || continue; \
-		b=$$(basename "$$f"); \
-		if [ ! -f "$(PREPARE)/mods/official/$$b" ]; then \
-			id=$${b%.toml}; \
-			rm -f "$$f"; \
-			rm -rf "$$pfx/mods/official/$$id"; \
-		fi; \
-	done; \
-	install -m644 $(PREPARE)/share/templates/*.toml "$$pfx/share/templates/"; \
-	if [ ! -f "$$pfx/share/applications/tuxgt.desktop" ]; then \
-		install -m644 $(PREPARE)/share/applications/tuxgt.desktop \
-			"$$pfx/share/applications/tuxgt.desktop"; \
-	fi; \
-	echo "deployed to $$pfx (games/, downloads/, config/, mods/user + kept official payloads untouched)"
+	set -e; \
+	ver=$$(grep -E '^version = "[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?"$$' src/tuxgt/Cargo.toml | head -1 | cut -d'"' -f2); \
+	if [ -z "$$ver" ]; then echo "error: could not parse workspace version from src/tuxgt/Cargo.toml" >&2; exit 1; fi; \
+	tarball="$(BUILD)/deploy.tar.gz"; \
+	case "$$tarball" in /*) ;; *) tarball="$(CURDIR)/$$tarball";; esac; \
+	trap 'rm -f "$$tarball"' EXIT; \
+	tar --sort=name --owner=0 --group=0 --mtime=@$(SOURCE_DATE_EPOCH) -czf "$$tarball" -C $(BUILD)/pkg tuxgt; \
+	"$(PREPARE)/bin/tuxgt" update --from "$$tarball" --tag "v$$ver" --prefix "$$pfx" --yes; \
+	echo "deployed to $$pfx via update --from (v$$ver; games/, mods/user + kept official payloads untouched)"
 
 # Maintainer release: version bump (optional), package, tag, draft GitHub release
 # (human publishes). Usage: make release [BUMP=major|minor|patch|beta|promote-beta] [DRY_RUN=1]
