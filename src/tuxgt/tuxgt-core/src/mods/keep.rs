@@ -85,7 +85,8 @@ pub async fn set_file_keep(
     )?;
     let mut m = crate::download::set_file_enabled(data_dir, game, instance, dest, on)?;
     if crate::is_install(&m.adapter) {
-        let root = crate::game_root(pool, game).await?;
+        let roots = crate::game_roots(pool, game).await?;
+        let root = &roots[0];
         let prefix = crate::install::prefix_for(pool, game, [dest].into_iter()).await?;
         let claims = claim_inventory(data_dir, game)?;
         if on {
@@ -96,7 +97,7 @@ pub async fn set_file_keep(
                 game,
                 &m,
                 dest,
-                &root,
+                root,
                 prefix.as_deref(),
                 &claims,
             )?;
@@ -104,7 +105,7 @@ pub async fn set_file_keep(
                 data_dir,
                 game,
                 &mut m,
-                &root,
+                root,
                 prefix.as_deref(),
                 &ops,
                 &claims,
@@ -120,7 +121,7 @@ pub async fn set_file_keep(
                 &excluded,
                 &mut m.backups,
                 &[dest.to_string()],
-                &root,
+                &roots,
                 prefix.as_deref(),
             )?;
             write_manifest(data_dir, &m)?;

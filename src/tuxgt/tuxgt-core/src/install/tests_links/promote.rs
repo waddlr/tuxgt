@@ -95,7 +95,7 @@ fn remove_instance(fx: &Contest, instance: &str) -> PromotionOutcome {
         &excluded,
         &mut backups,
         &dests,
-        &fx.root,
+        std::slice::from_ref(&fx.root),
         None,
     )
     .unwrap();

@@ -178,6 +178,11 @@ pub async fn build_launch_spec(
     if let Some(dir) = row.install_dir.as_deref() {
         pv_rw_add(&mut env, dir);
     }
+    // Install-adapter live root (exe parent) when it sits outside
+    // install_dir — e.g. MO2 detected PE under a separate gamePath.
+    if let Ok(root) = crate::game_root(pool, id).await {
+        pv_rw_add(&mut env, &root.to_string_lossy());
+    }
     if let Some(pfx) = prefix.as_deref() {
         pv_rw_add(&mut env, &pfx.to_string_lossy());
     }

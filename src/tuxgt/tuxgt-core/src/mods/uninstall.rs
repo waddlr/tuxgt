@@ -19,7 +19,7 @@ pub async fn uninstall_instance(
     let mut m = crate::need_manifest(data_dir, game, instance)?;
     let mut restored = std::collections::BTreeSet::new();
     if let Some(roots) = install_roots(pool, data_dir, game, &m).await? {
-        let foreign = foreign_dests(&m, &roots)?;
+        let foreign = foreign_dests(data_dir, game, &m, &roots)?;
         if !foreign.is_empty() && !yes {
             return Err(Error::NeedConfirm(format!(
                 "foreign game-dir dests left in place: {}",
@@ -39,7 +39,7 @@ pub async fn uninstall_instance(
             &excluded,
             &mut m.backups,
             &dests,
-            &roots.root,
+            &roots.roots,
             roots.prefix.as_deref(),
         )?;
         restored = outcome.removal.restored.into_iter().collect();
@@ -75,13 +75,13 @@ pub async fn uninstall_instance(
     Ok(())
 }
 
-/// Resolved install-adapter roots for one game: game dir, Wine
-/// prefix, and enabled game-dir claims. Computed once and shared by the
-/// foreign pre-check and the claim removal below.
+/// Resolved install-adapter roots for one game: live game dir (and any
+/// legacy `install_dir` package root), Wine prefix, and enabled game-dir
+/// claims. Computed once and shared by the foreign pre-check and the
+/// claim removal below.
 pub(in crate::mods) struct InstallRoots {
-    pub root: PathBuf,
+    pub roots: Vec<PathBuf>,
     pub prefix: Option<PathBuf>,
-    pub claims: crate::install::ClaimInventory,
 }
 
 /// Resolve install-adapter roots, or `None` for preload manifests
@@ -89,40 +89,64 @@ pub(in crate::mods) struct InstallRoots {
 /// scope scan.
 pub(in crate::mods) async fn install_roots(
     pool: &SqlitePool,
-    data_dir: &Path,
+    _data_dir: &Path,
     game: &str,
     m: &FileManifest,
 ) -> Result<Option<InstallRoots>> {
     if !crate::is_install(&m.adapter) {
         return Ok(None);
     }
-    let root = crate::game_root(pool, game).await?;
+    let roots = crate::game_roots(pool, game).await?;
     let prefix =
         crate::install::prefix_for(pool, game, m.files.iter().map(|f| f.dest.as_str())).await?;
-    let claims = crate::install::claim_inventory(data_dir, game)?;
-    Ok(Some(InstallRoots {
-        root,
-        prefix,
-        claims,
-    }))
+    Ok(Some(InstallRoots { roots, prefix }))
 }
 
 /// Foreign game-dir dests an uninstall would leave in place, given
 /// resolved roots. Generated-dest claims never count as foreign, so the
-/// dialog warns about exactly what the run would confirm.
+/// dialog warns about exactly what the run would confirm. Checks every
+/// game-dir root (live + legacy package root). The departing instance is
+/// forced live in the claim map so an already-disabled uninstall still
+/// owns its leftovers instead of treating them as foreign.
 pub(in crate::mods) fn foreign_dests(
+    data_dir: &Path,
+    game: &str,
     m: &FileManifest,
     roots: &InstallRoots,
 ) -> Result<Vec<String>> {
-    Ok(foreign_occupied(
-        m.files.iter().map(|f| f.dest.as_str()),
-        &roots.root,
-        roots.prefix.as_deref(),
-        &roots.claims,
-    )?
-    .into_iter()
-    .filter(|rel| !super::park::claims_generated(m, rel))
-    .collect())
+    let mut manifests = crate::game_manifests(data_dir, game)?;
+    if let Some(slot) = manifests
+        .iter_mut()
+        .find(|manifest| manifest.instance == m.instance)
+    {
+        *slot = m.clone();
+        slot.enabled = true;
+        for file in slot.files.iter_mut() {
+            file.enabled = true;
+        }
+    } else {
+        let mut live = m.clone();
+        live.enabled = true;
+        for file in live.files.iter_mut() {
+            file.enabled = true;
+        }
+        manifests.push(live);
+    }
+    let claims = crate::install::claim_inventory_from_manifests(data_dir, game, &manifests)?;
+    let mut out = std::collections::BTreeSet::new();
+    for root in &roots.roots {
+        for rel in foreign_occupied(
+            m.files.iter().map(|f| f.dest.as_str()),
+            root,
+            roots.prefix.as_deref(),
+            &claims,
+        )? {
+            if !super::park::claims_generated(m, &rel) {
+                out.insert(rel);
+            }
+        }
+    }
+    Ok(out.into_iter().collect())
 }
 
 pub fn enabled_mod_count(data_dir: &Path, game: &str) -> usize {

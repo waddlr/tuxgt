@@ -73,10 +73,10 @@ pub use game::{
     ADAPTER_INSTALL, ADAPTER_INSTALL_LINKS, ADAPTER_PRELOAD,
 };
 pub use install::{
-    apply_copies, foreign_dest, foreign_occupied, game_root, is_prefix_dest, load_conflicts,
-    need_manifest, other_claims, plan_copies, plan_dest_copy, prefix_drive_c, prefix_for,
-    prefix_rel, prefix_root, remove_copies, remove_dest_copy, validate_prefix_dests, CopyOp,
-    InstallMaterial, LoadConflict, Removal, PREFIX_DEST_PREFIX,
+    apply_copies, foreign_dest, foreign_occupied, game_root, game_roots, is_prefix_dest,
+    load_conflicts, need_manifest, other_claims, plan_copies, plan_dest_copy, prefix_drive_c,
+    prefix_for, prefix_rel, prefix_root, remove_copies, remove_dest_copy, validate_prefix_dests,
+    CopyOp, InstallMaterial, LoadConflict, Removal, PREFIX_DEST_PREFIX,
 };
 pub use instance::{
     add_mod, add_mod_from, add_mod_from_with_password, add_mod_with_password, apply_package_slot,

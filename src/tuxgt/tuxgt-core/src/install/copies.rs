@@ -14,26 +14,71 @@ use super::*;
 use crate::stage::{check_rel, stage_dir};
 use crate::{write_manifest, Error, FileManifest, PlannedFile, Result};
 
-/// Game-dir root for the install adapter: `install_dir`, else the exe parent.
+type GameRootRow = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+async fn game_root_row(pool: &SqlitePool, game_id: &str) -> Result<GameRootRow> {
+    sqlx::query_as(
+        "SELECT install_dir, exe_path, detected_exe_path, override_exe_path
+         FROM games WHERE id = ?",
+    )
+    .bind(game_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| Error::UnknownGame(game_id.into()))
+}
+
+fn install_dir_of(install: &Option<String>) -> Option<PathBuf> {
+    install
+        .as_deref()
+        .filter(|d| !d.is_empty())
+        .map(PathBuf::from)
+}
+
+/// Live game-dir root: parent of the effective exe (`override_exe_path`,
+/// else `detected_exe_path`, else `exe_path`), else `install_dir`.
+/// Relative exe paths join `install_dir` when set.
 pub async fn game_root(pool: &SqlitePool, game_id: &str) -> Result<PathBuf> {
-    let row: Option<(Option<String>, Option<String>, Option<String>)> =
-        sqlx::query_as("SELECT install_dir, exe_path, override_exe_path FROM games WHERE id = ?")
-            .bind(game_id)
-            .fetch_optional(pool)
-            .await?;
-    let (install, store_exe, ovr_exe) = row.ok_or_else(|| Error::UnknownGame(game_id.into()))?;
-    let exe = ovr_exe.or(store_exe).filter(|e| !e.is_empty());
-    match (install, exe) {
-        (Some(dir), _) if !dir.is_empty() => Ok(PathBuf::from(dir)),
-        (_, Some(exe)) => {
-            let p = PathBuf::from(&exe);
-            p.parent()
-                .filter(|p| !p.as_os_str().is_empty())
-                .map(Path::to_path_buf)
-                .ok_or_else(|| Error::MissingExe(game_id.into()))
+    Ok(game_roots(pool, game_id).await?.remove(0))
+}
+
+/// Roots for remove / foreign / harvest: [`game_root`] first, then
+/// `install_dir` when it is set and differs (copies from the old
+/// install_dir-first rule may still live under the package root).
+pub async fn game_roots(pool: &SqlitePool, game_id: &str) -> Result<Vec<PathBuf>> {
+    let (install, store_exe, det_exe, ovr_exe) = game_root_row(pool, game_id).await?;
+    let install_dir = install_dir_of(&install);
+    let nonempty = |s: Option<String>| s.filter(|e| !e.is_empty());
+    let exe = nonempty(ovr_exe)
+        .or_else(|| nonempty(det_exe))
+        .or_else(|| nonempty(store_exe));
+    let primary = if let Some(exe) = exe {
+        let mut p = PathBuf::from(&exe);
+        if !p.is_absolute() {
+            if let Some(dir) = install_dir.as_ref() {
+                p = dir.join(&p);
+            }
         }
-        _ => Err(Error::MissingExe(game_id.into())),
+        p.parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(Path::to_path_buf)
+            .ok_or_else(|| Error::MissingExe(game_id.into()))?
+    } else {
+        install_dir
+            .clone()
+            .ok_or_else(|| Error::MissingExe(game_id.into()))?
+    };
+    let mut out = vec![primary.clone()];
+    if let Some(dir) = install_dir {
+        if dir != primary {
+            out.push(dir);
+        }
     }
+    Ok(out)
 }
 
 #[derive(Debug)]

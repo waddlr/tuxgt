@@ -88,7 +88,8 @@ pub async fn set_instance_enabled(
     write_manifest(data_dir, &m)?;
     let mut restored = BTreeSet::new();
     if crate::is_install(&m.adapter) {
-        let root = crate::game_root(pool, game).await?;
+        let roots = crate::game_roots(pool, game).await?;
+        let root = &roots[0];
         let prefix =
             crate::install::prefix_for(pool, game, m.files.iter().map(|f| f.dest.as_str())).await?;
         let claims = claim_inventory(data_dir, game)?;
@@ -98,7 +99,7 @@ pub async fn set_instance_enabled(
                 game,
                 &m.instance,
                 m.files.iter().filter(|f| f.enabled),
-                &root,
+                root,
                 prefix.as_deref(),
                 InstallMaterial::of(&m.adapter),
                 &claims,
@@ -108,7 +109,7 @@ pub async fn set_instance_enabled(
                 data_dir,
                 game,
                 &mut m,
-                &root,
+                root,
                 prefix.as_deref(),
                 &ops,
                 &claims,
@@ -127,7 +128,7 @@ pub async fn set_instance_enabled(
                 &excluded,
                 &mut m.backups,
                 &dests,
-                &root,
+                &roots,
                 prefix.as_deref(),
             )?;
             restored.extend(outcome.removal.restored);

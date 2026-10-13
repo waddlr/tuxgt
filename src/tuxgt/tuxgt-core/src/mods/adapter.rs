@@ -22,7 +22,7 @@ use super::*;
 use crate::game::{game_adapter, is_install, set_game_adapter, validate_adapter, GameId};
 use crate::install::{backups_dir, resolve_target};
 use crate::{
-    apply_copies, game_root, plan_copies, prewire::managed_ini, prewire_game, remove_copies,
+    apply_copies, game_roots, plan_copies, prewire::managed_ini, prewire_game, remove_copies,
     write_manifest, CopyOp, Error, FileManifest, InstallMaterial, Result,
 };
 
@@ -290,6 +290,7 @@ struct ConvertPlan {
     moving: Vec<FileManifest>,
     plans: BTreeMap<String, Vec<CopyOp>>,
     root: PathBuf,
+    roots: Vec<PathBuf>,
     prefix: Option<PathBuf>,
     harvested: Vec<HarvestedMove>,
 }
@@ -387,11 +388,13 @@ async fn plan_conversion(
             moving: Vec::new(),
             plans: BTreeMap::new(),
             root: PathBuf::new(),
+            roots: Vec::new(),
             prefix: None,
             harvested: Vec::new(),
         });
     }
-    let root = game_root(pool, game).await?;
+    let roots = game_roots(pool, game).await?;
+    let root = roots[0].clone();
     let all_dests: Vec<String> = moving
         .iter()
         .flat_map(|m| m.files.iter().map(|f| f.dest.clone()))
@@ -475,6 +478,7 @@ async fn plan_conversion(
         moving,
         plans,
         root,
+        roots,
         prefix,
         harvested,
     })
@@ -524,6 +528,7 @@ pub async fn convert_game_adapter(
         moving,
         plans,
         root,
+        roots,
         prefix,
         harvested,
     } = plan_conversion(pool, data_dir, config_dir, game, &target, yes, slots_chosen).await?;
@@ -572,6 +577,7 @@ pub async fn convert_game_adapter(
         &mut moving,
         &plans,
         &root,
+        &roots,
         prefix.as_deref(),
         &harvested,
     )
@@ -649,6 +655,7 @@ async fn apply_conversion(
     moving: &mut [FileManifest],
     plans: &BTreeMap<String, Vec<CopyOp>>,
     root: &Path,
+    roots: &[PathBuf],
     prefix: Option<&Path>,
     harvested: &[HarvestedMove],
 ) -> Result<()> {
@@ -685,6 +692,9 @@ async fn apply_conversion(
             // Preload keeps no game-dir claims: restore what was backed up,
             // delete what TuxGT still owns, and drop the backup map so no
             // enabled manifest claims an adapter it does not have.
+            let primary = &roots[0];
+            // Live root uses the real enabled inventory: a disabled
+            // convert must not delete a still-enabled winner's file.
             remove_copies(
                 data_dir,
                 &mut m.backups,
@@ -693,10 +703,66 @@ async fn apply_conversion(
                 &m.instance,
                 &m.adapter,
                 &m.files,
-                root,
+                primary,
                 prefix,
                 &claims,
             )?;
+            // Legacy package roots: force this instance live only for
+            // classifying/removing its own sole-owner leftovers (including
+            // an already-disabled claim whose disable left package-root
+            // orphans).
+            let mut live = current.clone();
+            if let Some(slot) = live
+                .iter_mut()
+                .find(|manifest| manifest.instance == m.instance)
+            {
+                *slot = m.clone();
+                slot.enabled = true;
+                for file in slot.files.iter_mut() {
+                    file.enabled = true;
+                }
+            }
+            let live_claims =
+                crate::install::claim_inventory_from_manifests(data_dir, game, &live)?;
+            for scrub_root in roots.iter().skip(1) {
+                let sole: Vec<&str> = m
+                    .files
+                    .iter()
+                    .filter_map(|f| {
+                        if crate::install::is_prefix_dest(&f.dest) {
+                            return None;
+                        }
+                        let target = resolve_target(scrub_root, prefix, &f.dest).ok()?;
+                        match crate::install::classify_dest(
+                            &target,
+                            live_claims.claims_for(&f.dest),
+                        ) {
+                            Ok(crate::install::DestStatus::Owned { instances, .. })
+                                if instances.iter().any(|o| o == &m.instance)
+                                    && instances.iter().all(|o| o == &m.instance) =>
+                            {
+                                Some(f.dest.as_str())
+                            }
+                            _ => None,
+                        }
+                    })
+                    .collect();
+                if sole.is_empty() {
+                    continue;
+                }
+                remove_copies(
+                    data_dir,
+                    &mut m.backups,
+                    sole.into_iter(),
+                    game,
+                    &m.instance,
+                    &m.adapter,
+                    &m.files,
+                    scrub_root,
+                    prefix,
+                    &live_claims,
+                )?;
+            }
         }
         m.adapter = target.to_string();
         write_manifest(data_dir, &m)?;

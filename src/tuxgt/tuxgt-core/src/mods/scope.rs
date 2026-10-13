@@ -56,7 +56,7 @@ pub async fn install_scope(
             root_error: None,
         };
         match install_roots(pool, data_dir, game, m).await {
-            Ok(Some(roots)) => match foreign_dests(m, &roots) {
+            Ok(Some(roots)) => match foreign_dests(data_dir, game, m, &roots) {
                 Ok(foreign) => hit.foreign = foreign,
                 // A mid-scan read/hash failure degrades to the same
                 // warning: the run reports the real error per game.

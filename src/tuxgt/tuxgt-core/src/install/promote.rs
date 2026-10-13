@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use super::claims::{claim_inventory_from_manifests, ClaimInventory};
 use super::material::{
@@ -31,6 +32,10 @@ enum Pending {
 /// wherever the departing claim is physically live. A departing loser never
 /// touches the winner; a departing winner is replaced by the next claimant
 /// in the promoted manifest's own materialization.
+///
+/// `roots` is [`super::game_roots`]: index 0 is the live write root
+/// (promotion target); further entries are legacy package roots scrubbed
+/// first so pre-fix copies under `install_dir` still restore/delete.
 pub(crate) fn remove_with_promotion(
     data_dir: &Path,
     game_id: &str,
@@ -38,9 +43,12 @@ pub(crate) fn remove_with_promotion(
     excluded: &BTreeSet<(String, String)>,
     backups: &mut BTreeMap<String, String>,
     dests: &[String],
-    root: &Path,
+    roots: &[PathBuf],
     prefix: Option<&Path>,
 ) -> Result<PromotionOutcome> {
+    let root = roots
+        .first()
+        .ok_or_else(|| Error::Install(format!("{game_id}: no game-dir root for removal")))?;
     let mut manifests = crate::game_manifests(data_dir, game_id)?;
     let instance = departing.instance.clone();
     let departing_dests = departing
@@ -52,14 +60,15 @@ pub(crate) fn remove_with_promotion(
         .iter_mut()
         .find(|manifest| manifest.instance == instance)
     {
-        *slot = departing;
+        *slot = departing.clone();
     } else {
-        manifests.push(departing);
+        manifests.push(departing.clone());
     }
     // The live inventory answers "whose content is at this dest right now",
     // so the departing claim counts as live even when this operation is
     // what disables or omits it: force it (and its departing dests) enabled
-    // for classification only.
+    // for classification only. Legacy scrub uses the same inventory so a
+    // already-disabled claim still owns package-root leftovers.
     let mut live_manifests = manifests.clone();
     if let Some(slot) = live_manifests
         .iter_mut()
@@ -73,6 +82,78 @@ pub(crate) fn remove_with_promotion(
         }
     }
     let live_inventory = claim_inventory_from_manifests(data_dir, game_id, &live_manifests)?;
+    // Scrub legacy package roots before the live pass so backup records
+    // still restore there. Skip `pfx:` dests: they resolve under the Wine
+    // prefix regardless of root, and scrubbing them here would delete the
+    // prefix file before the live pass can promote a successor.
+    let mut early = Removal {
+        restored: Vec::new(),
+        deleted: Vec::new(),
+        left_foreign: Vec::new(),
+    };
+    if roots.len() > 1 {
+        for alt in &roots[1..] {
+            // Only scrub dests this departing claim alone still owns at the
+            // package root. A shared hash with another enabled claim means
+            // the winner's only copy may live here — leave it. Skip `pfx:`
+            // (prefix resolves independent of root).
+            let mut restore_here: Vec<&str> = Vec::new();
+            for dest in dests.iter().map(String::as_str) {
+                if super::is_prefix_dest(dest) {
+                    continue;
+                }
+                let target = resolve_target(alt, prefix, dest)?;
+                let sole = match classify_dest(&target, live_inventory.claims_for(dest))? {
+                    DestStatus::Owned { instances, .. }
+                        if instances.iter().any(|owner| owner == &instance)
+                            && instances.iter().all(|owner| owner == &instance) =>
+                    {
+                        true
+                    }
+                    _ => false,
+                };
+                if !sole {
+                    continue;
+                }
+                // If the live root also holds our claim, delete the package
+                // leftover without consuming the dest backup — that record
+                // restores beside the exe on the live pass.
+                let live_target = resolve_target(root, prefix, dest)?;
+                let live_owned = matches!(
+                    classify_dest(&live_target, live_inventory.claims_for(dest))?,
+                    DestStatus::Owned { instances, .. }
+                        if instances.iter().any(|owner| owner == &instance)
+                );
+                if live_owned {
+                    match fs::remove_file(&target) {
+                        Ok(()) => early.deleted.push(dest.to_string()),
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(e) => return Err(e.into()),
+                    }
+                } else {
+                    restore_here.push(dest);
+                }
+            }
+            if restore_here.is_empty() {
+                continue;
+            }
+            let scrub = super::remove_copies(
+                data_dir,
+                backups,
+                restore_here.into_iter(),
+                game_id,
+                &departing.instance,
+                &departing.adapter,
+                &departing.files,
+                alt,
+                prefix,
+                &live_inventory,
+            )?;
+            early.restored.extend(scrub.restored);
+            early.deleted.extend(scrub.deleted);
+            early.left_foreign.extend(scrub.left_foreign);
+        }
+    }
     let mut inventory = claim_inventory_from_manifests(data_dir, game_id, &manifests)?;
     for (instance, dest) in excluded {
         inventory.remove_claim(instance, dest);
@@ -168,6 +249,9 @@ pub(crate) fn remove_with_promotion(
         pending,
         &mut outcome,
     )?;
+    outcome.removal.restored.extend(early.restored);
+    outcome.removal.deleted.extend(early.deleted);
+    outcome.removal.left_foreign.extend(early.left_foreign);
     Ok(outcome)
 }
 

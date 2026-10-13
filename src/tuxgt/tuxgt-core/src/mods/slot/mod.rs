@@ -243,7 +243,8 @@ async fn rewrite_instance_slot(
     let mut m = crate::read_manifest(data_dir, game, instance)?
         .ok_or_else(|| Error::NoManifest(format!("{game} {instance}")))?;
     if crate::is_install(&m.adapter) && m.enabled {
-        let root = crate::game_root(pool, game).await?;
+        let roots = crate::game_roots(pool, game).await?;
+        let root = &roots[0];
         let prefix = crate::install::prefix_for(
             pool,
             game,
@@ -264,7 +265,7 @@ async fn rewrite_instance_slot(
             &excluded,
             &mut m.backups,
             &[old_dest.clone()],
-            &root,
+            &roots,
             prefix.as_deref(),
         )?;
         m.files[idx].dest = new_dest.clone();
@@ -276,7 +277,7 @@ async fn rewrite_instance_slot(
                 game,
                 &m,
                 &new_dest,
-                &root,
+                root,
                 prefix.as_deref(),
                 &claims,
             )?;
@@ -284,7 +285,7 @@ async fn rewrite_instance_slot(
                 data_dir,
                 game,
                 &mut m,
-                &root,
+                root,
                 prefix.as_deref(),
                 &ops,
                 &claims,

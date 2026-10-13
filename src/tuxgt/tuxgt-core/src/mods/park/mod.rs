@@ -250,8 +250,9 @@ pub(super) async fn park_disabled(
     // is parked unless that directory is the game dir.
     let empty = BTreeSet::new();
     if crate::is_install(&mine.adapter) {
-        let root = crate::install::game_root(pool, game).await?;
-        if root == runtime {
+        let roots = crate::install::game_roots(pool, game).await?;
+        let root = &roots[0];
+        if root == &runtime {
             park_tree(
                 &runtime,
                 &park.join(RUNTIME_SIDE),
@@ -273,16 +274,18 @@ pub(super) async fn park_disabled(
                 true,
                 true,
             )?;
-            park_tree(
-                &root,
-                &park.join(GAME_SIDE),
-                &mine_claim,
-                &keep_dests,
-                &keep_globs,
-                restored,
-                false,
-                false,
-            )?;
+            for root in &roots {
+                park_tree(
+                    root,
+                    &park.join(GAME_SIDE),
+                    &mine_claim,
+                    &keep_dests,
+                    &keep_globs,
+                    restored,
+                    false,
+                    false,
+                )?;
+            }
         }
     } else {
         park_tree(

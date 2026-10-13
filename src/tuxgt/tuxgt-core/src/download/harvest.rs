@@ -39,8 +39,10 @@ pub(crate) fn walk_game_root(root: &Path) -> Vec<String> {
 }
 
 /// Harvest roots for a game: the managed `<game>/runtime/` dir first when it
-/// exists on disk, then the install-adapter `game_root` when it resolves
-/// and differs. Unparseable game ids yield no roots.
+/// exists on disk, then every install-adapter [`crate::install::game_roots`]
+/// entry that resolves and differs (live exe parent plus a legacy
+/// `install_dir` package root when they differ). Unparseable game ids yield
+/// no roots.
 pub async fn harvest_roots(
     pool: &sqlx::SqlitePool,
     data_dir: &Path,
@@ -54,9 +56,11 @@ pub async fn harvest_roots(
     if runtime.exists() {
         roots.push(runtime.clone());
     }
-    if let Ok(root) = crate::install::game_root(pool, game_id).await {
-        if Some(&root) != roots.first() && root != runtime {
-            roots.push(root);
+    if let Ok(game_roots) = crate::install::game_roots(pool, game_id).await {
+        for root in game_roots {
+            if !roots.iter().any(|r| r == &root) {
+                roots.push(root);
+            }
         }
     }
     roots
