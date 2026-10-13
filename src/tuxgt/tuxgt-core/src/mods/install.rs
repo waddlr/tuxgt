@@ -40,7 +40,9 @@ pub async fn install_instance(
         return Err(Error::UnknownGame(game.into()));
     }
     let inst = find_mod(config_dir, data_dir, instance_id)?;
-    if !inst.enabled {
+    // A not-ready `provided` Mod ignores this gate (`provided_not_ready`
+    // owns the rule): the provided check below parks it instead.
+    if !inst.enabled && !provided_not_ready(data_dir, &inst)? {
         return Err(Error::InstanceDisabled(inst.id));
     }
     if !inst.allows_adapter(&adapter) {
@@ -66,7 +68,7 @@ pub async fn install_instance(
         match with_requires.as_deref() {
             Some(other) => {
                 let oi = find_mod(config_dir, data_dir, other)?;
-                if !oi.enabled {
+                if !oi.enabled && !provided_not_ready(data_dir, &oi)? {
                     return Err(Error::InstanceDisabled(oi.id));
                 }
                 if oi.mod_type != *r {
@@ -98,7 +100,7 @@ pub async fn install_instance(
         match with_requires.as_deref() {
             Some(other) => {
                 let oi = find_mod(config_dir, data_dir, other)?;
-                if !oi.enabled {
+                if !oi.enabled && !provided_not_ready(data_dir, &oi)? {
                     return Err(Error::InstanceDisabled(oi.id));
                 }
                 if oi.id != *req {

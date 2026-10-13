@@ -82,15 +82,26 @@ fn partial_set_is_listed_before_ready() {
     let _ = fs::remove_dir_all(&dir);
 }
 
-/// Not-ready no longer hides a provided mod, but disabled still does:
-/// a cleared payload (which disables the mod) stays out of the picker.
+/// Disabled hides a ready mod, but not a not-ready provided one:
+/// clearing its payload disables it and Settings paints no switch
+/// while files are missing, so the picker is its Game-page way back.
 #[test]
-fn disabled_not_ready_stays_unlisted() {
+fn disabled_not_ready_stays_listed_until_ready() {
     let (dir, data, cfg) = scratch("dis");
     crate::disable_mod(&cfg, "nvidia-streamline", &data).unwrap();
     let listed = mods_for_game(&cfg, "Any Game", None, &data).unwrap();
-    assert!(listed.mods.iter().all(|m| m.id != "nvidia-streamline"));
+    assert!(listed.mods.iter().any(|m| m.id == "nvidia-streamline"));
     assert!(listed.mods.iter().any(|m| m.id == "reshade"));
+
+    // Ready and explicitly disabled again: the offer switch wins.
+    let all = dir.join("all");
+    for name in STREAM {
+        write_tree(&all, name, name.as_bytes());
+    }
+    provide_files(&cfg, &data, "nvidia-streamline", &all).unwrap();
+    crate::disable_mod(&cfg, "nvidia-streamline", &data).unwrap();
+    let listed = mods_for_game(&cfg, "Any Game", None, &data).unwrap();
+    assert!(listed.mods.iter().all(|m| m.id != "nvidia-streamline"));
     let _ = fs::remove_dir_all(&dir);
 }
 

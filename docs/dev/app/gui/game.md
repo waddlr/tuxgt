@@ -294,7 +294,8 @@ picker is open). Header: title + **Install** (disabled if none checked) ·
 Cancel. Cancel closes with no writes. When open, the installed list hides.
 
 Body: applicable Mods without an Instance (registered, enabled, `games`
-globs; disabled Mods omitted), in the same three sections (OptiScaler |
+globs; disabled Mods omitted, except a not-ready `provided` Mod, which the
+enabled flag never hides), in the same three sections (OptiScaler |
 ReShade | Custom) with the Settings Mods page’s subheads as visual breaks —
 **Official**, **User mods**, and **User Packs** inside ReShade for the pack
 kinds (officials first, like `pack_rows`). A section header is clickable and
@@ -335,7 +336,10 @@ requires then recipe requires, transitive over the catalog minus installed
 manifests): one candidate paints as a `- Name` bullet, 2+ as one dep line with
 a horizontal glyph radio (`●`/`○`, first pre-selected, click to switch). One
 **Install required** queues the chosen deps topo-first, then the target, ahead
-of the rest. An empty closure, or a dep with no candidate, falls back to the
+of the rest. A dep named by id is offered even when disabled if it is a
+not-ready `provided` Mod (its queued install parks for files); type
+candidates stay enabled-only, so a files park is never the default pick
+for a kind. An empty closure, or a dep with no candidate, falls back to the
 single-miss card or the status line. `NeedsProvidedFiles` parks like the
 archive password (`gui.provide-during-install`): the page body becomes a
 Files needed card for the Mod core names — the checked Mod or a queued

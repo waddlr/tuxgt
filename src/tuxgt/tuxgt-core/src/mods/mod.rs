@@ -39,7 +39,7 @@ pub use opts::{is_config_text, payload_config_path};
 pub use preview::{effect_names_for, payload_has_files, payload_provenance, preview_payload_files};
 pub use provide::{
     clear_provided_files, provide_files, provide_files_with_password, provided_files,
-    ProvideReport, ProvidedFiles,
+    provided_not_ready, ProvideReport, ProvidedFiles,
 };
 pub use scope::{
     install_scope, install_scope_all, plan_bulk_restore, set_enabled_in_games, uninstall_in_games,

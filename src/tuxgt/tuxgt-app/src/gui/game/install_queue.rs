@@ -131,17 +131,20 @@ pub(crate) fn order_install_ids(
 }
 
 /// E34 Requires candidates for one `MissingRequires` payload. Core
-/// doesn't say which loop raised it, so a payload an enabled Mod
+/// doesn't say which loop raised it, so a payload an offered Mod
 /// carries is treated as a recipe id (that single Mod), otherwise as
 /// a Mod type (every enabled Mod of that type, sorted + deduped).
-/// The card installs the first, so multi-candidate order is
-/// deterministic. Tuples are (id, label, mod_type, enabled).
+/// A park-offered Mod (disabled, not-ready `provided`) matches by id
+/// only: type candidates stay enabled-only, so a files park is never
+/// the silent default pick for a kind. The card installs the first,
+/// so multi-candidate order is deterministic. Tuples are
+/// (id, label, mod_type, enabled, park_offered).
 pub(crate) fn requires_candidates<'a>(
-    mods: impl IntoIterator<Item = (&'a str, &'a str, &'a str, bool)>,
+    mods: impl IntoIterator<Item = (&'a str, &'a str, &'a str, bool, bool)>,
     req: &str,
 ) -> Vec<(String, String)> {
     let mods: Vec<_> = mods.into_iter().collect();
-    if let Some(found) = mods.iter().find(|m| m.3 && m.0 == req) {
+    if let Some(found) = mods.iter().find(|m| (m.3 || m.4) && m.0 == req) {
         return vec![(found.0.to_string(), found.1.to_string())];
     }
     let mut out: Vec<(String, String)> = mods
@@ -161,6 +164,10 @@ pub(crate) struct ClosureMod<'a> {
     pub mod_type: &'a str,
     pub requires: &'a [String],
     pub enabled: bool,
+    /// Disabled but a not-ready `provided` Mod: offered when a
+    /// require names it by id (its install parks for files), never
+    /// as a type candidate.
+    pub park_offered: bool,
 }
 
 /// Full missing-require closure for an install target, in core check
@@ -186,9 +193,9 @@ pub(crate) fn missing_closure(
     };
     let installed_ids: HashSet<&str> = installed.iter().map(|(i, _)| *i).collect();
     let installed_types: HashSet<&str> = installed.iter().map(|(_, t)| *t).collect();
-    let tuples: Vec<(&str, &str, &str, bool)> = mods
+    let tuples: Vec<(&str, &str, &str, bool, bool)> = mods
         .iter()
-        .map(|m| (m.id, m.label, m.mod_type, m.enabled))
+        .map(|m| (m.id, m.label, m.mod_type, m.enabled, m.park_offered))
         .collect();
     // (is_type, text) worklist, owned so enqueues from any catalog row fit.
     let mut queue: VecDeque<(bool, String)> = VecDeque::new();
@@ -246,7 +253,10 @@ pub(crate) fn missing_closure(
             {
                 continue;
             }
-            let Some(m) = by_id.get(text.as_str()).filter(|m| m.enabled) else {
+            let Some(m) = by_id
+                .get(text.as_str())
+                .filter(|m| m.enabled || m.park_offered)
+            else {
                 out.push(ReqDep {
                     req: text,
                     candidates: Box::default(),
@@ -295,11 +305,11 @@ mod tests {
     #[test]
     fn requires_candidates_id_then_type() {
         let mods = [
-            ("zebra", "Zebra", "reshade", true),
-            ("arlene", "Arlene", "reshade", true),
-            ("off", "Off", "reshade", false),
-            ("mbase", "Base", "custom", true),
-            ("zebra", "Zebra", "reshade", true),
+            ("zebra", "Zebra", "reshade", true, false),
+            ("arlene", "Arlene", "reshade", true, false),
+            ("off", "Off", "reshade", false, false),
+            ("mbase", "Base", "custom", true, false),
+            ("zebra", "Zebra", "reshade", true, false),
         ];
         // Recipe id: the single Mod, even with same-type siblings around.
         assert_eq!(
@@ -322,8 +332,8 @@ mod tests {
         // Install required takes the first, so a type listing could
         // install (and core would refuse) the wrong Mod for an id require.
         let amb = [
-            ("zebra", "Zebra", "reshade", true),
-            ("reshade", "ReShade", "reshade", true),
+            ("zebra", "Zebra", "reshade", true, false),
+            ("reshade", "ReShade", "reshade", true, false),
         ];
         assert_eq!(
             requires_candidates(amb, "reshade"),
@@ -344,7 +354,64 @@ mod tests {
             mod_type,
             requires,
             enabled,
+            park_offered: false,
         }
+    }
+
+    fn cmod_park<'a>(
+        id: &'a str,
+        label: &'a str,
+        mod_type: &'a str,
+        requires: &'a [String],
+    ) -> ClosureMod<'a> {
+        ClosureMod {
+            id,
+            label,
+            mod_type,
+            requires,
+            enabled: false,
+            park_offered: true,
+        }
+    }
+
+    /// A park-offered (disabled, not-ready `provided`) Mod is a
+    /// candidate when a require names it by id, but never for a type
+    /// require: Install required must not park for files when an
+    /// enabled Mod of the kind could just install — the same rule
+    /// both in the candidate list and in closure resolution.
+    #[test]
+    fn park_offered_matches_by_id_never_by_type() {
+        let mods = [
+            ("apark", "APark", "reshade", false, true),
+            ("zready", "ZReady", "reshade", true, false),
+        ];
+        assert_eq!(
+            requires_candidates(mods, "apark"),
+            [("apark".to_string(), "APark".to_string())]
+        );
+        // Type listing stays enabled-only even though "apark" sorts first.
+        assert_eq!(
+            requires_candidates(mods, "reshade"),
+            [("zready".to_string(), "ZReady".to_string())]
+        );
+
+        let reqs = ["apark".to_string()];
+        let mods = [
+            cmod("app", "App", "custom", &reqs, true),
+            cmod_park("apark", "APark", "custom", &[]),
+        ];
+        let deps = missing_closure(&mods, &[], "app");
+        assert_eq!(deps.len(), 1);
+        assert_eq!(deps[0].chosen.as_deref(), Some("apark"));
+
+        // Only a park-offered Mod of the required type: unresolvable.
+        let tmods = [
+            cmod("fx", "Fx", "reshade_addon", &[], true),
+            cmod_park("apark", "APark", "reshade", &[]),
+        ];
+        let deps = missing_closure(&tmods, &[], "fx");
+        assert_eq!(deps.len(), 1);
+        assert!(deps[0].candidates.is_empty() && deps[0].chosen.is_none());
     }
 
     /// Requires card lists every missing dep: type Requires first (core

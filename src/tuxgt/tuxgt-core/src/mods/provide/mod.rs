@@ -45,6 +45,16 @@ enum Pick {
     Ambiguous,
 }
 
+/// True for a `provided` recipe whose payload is not ready yet.
+/// This state ignores the enabled flag everywhere a Mod is offered:
+/// clearing the payload disables the Mod and Settings paints no
+/// switch while files are missing, so it stays offerable on the
+/// Game page too (Settings Provide files and the CLI also work),
+/// and completing the provide re-enables it.
+pub fn provided_not_ready(data_dir: &Path, inst: &Mod) -> Result<bool> {
+    Ok(provided_files(data_dir, inst)?.is_some_and(|p| !p.ready))
+}
+
 /// `None` when `inst` is not a `provided` source. Does not create directories.
 pub fn provided_files(data_dir: &Path, inst: &Mod) -> Result<Option<ProvidedFiles>> {
     let SourceRef::Provided { files, .. } = &inst.source else {

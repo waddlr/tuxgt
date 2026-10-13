@@ -278,6 +278,9 @@ async fn partial_reprovide_does_not_publish_a_digest() {
 /// A `--with-requires` dep that is itself not ready stops the nested
 /// install naming the dep, not the target, and writes no manifest for
 /// either — the GUI park parses that id to ask for the dep's files.
+/// The dep is also disabled (the cleared-payload state): readiness is
+/// reported before the disabled gate, direct and nested alike, so the
+/// park can happen; completing the provide re-enables it.
 #[tokio::test]
 async fn nested_require_names_the_not_ready_dep() {
     let (dir, data, cfg) = scratch("nested");
@@ -301,6 +304,20 @@ async fn nested_require_names_the_not_ready_dep() {
     let src = dir.join("needs-streamline.toml");
     fs::write(&src, recipe).unwrap();
     crate::add_mod(&cfg, &src, &data).unwrap();
+    crate::disable_mod(&cfg, "nvidia-streamline", &data).unwrap();
+    // Direct install of the disabled not-ready dep parks too.
+    let err = install_instance(
+        &pool,
+        &data,
+        &cfg,
+        gid,
+        "nvidia-streamline",
+        &InstallOpts::default(),
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, crate::Error::NeedsProvidedFiles(_)), "{err}");
     let opts = InstallOpts {
         with_requires: Some("nvidia-streamline".into()),
         ..InstallOpts::default()
@@ -316,5 +333,25 @@ async fn nested_require_names_the_not_ready_dep() {
     assert!(crate::read_manifest(&data, gid, "needs-streamline")
         .unwrap()
         .is_none());
+
+    // Ready and explicitly disabled again, the disabled gate wins.
+    let all = dir.join("all");
+    for name in STREAM {
+        write_tree(&all, name, name.as_bytes());
+    }
+    provide_files(&cfg, &data, "nvidia-streamline", &all).unwrap();
+    crate::disable_mod(&cfg, "nvidia-streamline", &data).unwrap();
+    let err = install_instance(
+        &pool,
+        &data,
+        &cfg,
+        gid,
+        "nvidia-streamline",
+        &InstallOpts::default(),
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, crate::Error::InstanceDisabled(_)), "{err}");
     let _ = fs::remove_dir_all(&dir);
 }

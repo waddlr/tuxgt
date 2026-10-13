@@ -203,7 +203,9 @@ pub(crate) fn load_recipe_dir(
     Ok(())
 }
 
-/// `list_mods` filtered to the recipes applicable to a game and enabled.
+/// `list_mods` filtered to the recipes applicable to a game and enabled,
+/// plus not-ready `provided` recipes whatever their enabled flag
+/// (`provided_not_ready` owns that rule).
 /// A recipe with no `games` and no `appids` applies to every game;
 /// otherwise it applies when its `games` globs match the display name
 /// (case-insensitive) or any of its `appids` equals the game's resolved
@@ -224,7 +226,12 @@ pub fn mods_for_game(
                 .iter()
                 .any(|g| crate::download::glob_match(&g.to_lowercase(), &name))
             || (steam_appid.is_some() && i.appids.iter().any(|a| Some(*a) == steam_appid));
-        if !i.enabled || !applies {
+        if !applies {
+            continue;
+        }
+        // A payload read error drops only this row (Settings paints
+        // the error); it must not fail the whole listing.
+        if !i.enabled && !crate::provided_not_ready(data_dir, &i).unwrap_or(false) {
             continue;
         }
         // A not-ready `provided` mod stays listed: the picker shows its

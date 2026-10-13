@@ -339,6 +339,14 @@ impl Shell {
                         // missing dep; Install required queues them first.
                         let data = data_dir();
                         let list = list_mods(&config_dir(), &data).ok();
+                        // A disabled not-ready `provided` dep is
+                        // park-offered: a candidate when a require
+                        // names it by id (its install parks for files;
+                        // `provided_not_ready` owns the rule), never a
+                        // type candidate.
+                        let park_only = |m: &tuxgt_core::Mod| {
+                            !m.enabled && tuxgt_core::provided_not_ready(&data, m).unwrap_or(false)
+                        };
                         let manifests =
                             tuxgt_core::game_manifests(&data, &done).unwrap_or_default();
                         let mut deps: Vec<ReqDep> = list
@@ -353,6 +361,7 @@ impl Shell {
                                         mod_type: &m.mod_type,
                                         requires: &m.requires,
                                         enabled: m.enabled,
+                                        park_offered: park_only(m),
                                     })
                                     .collect();
                                 let installed: Vec<(&str, &str)> = manifests
@@ -376,6 +385,7 @@ impl Shell {
                                                 i.label.as_str(),
                                                 i.mod_type.as_str(),
                                                 i.enabled,
+                                                park_only(i),
                                             )
                                         }),
                                         &t,
