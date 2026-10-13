@@ -277,7 +277,7 @@ impl Shell {
 }
 
 /// Heading plus each pattern. `None` when the list is empty so the heading stays hidden.
-fn pattern_list(heading: String, items: &[String], cx: &App) -> Option<AnyElement> {
+pub(crate) fn pattern_list(heading: String, items: &[String], cx: &App) -> Option<AnyElement> {
     if items.is_empty() {
         return None;
     }

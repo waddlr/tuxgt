@@ -61,6 +61,12 @@ impl Shell {
         if self.pending_archive_password.is_some() && !on_mods {
             return self.archive_password_box(view, cx).into_any_element();
         }
+        // A parked install's Files needed card replaces the body the
+        // same way. An open archive-password card (an encrypted pick
+        // from this very park) outranks it until it resolves.
+        if self.pending_provide.is_some() && self.pending_archive_password.is_none() {
+            return self.provide_box(view, cx).into_any_element();
+        }
         match self.nav {
             Nav::Library => self.library_scroll(view, cx).into_any_element(),
             Nav::Game => self.game_scroll(view, cx).into_any_element(),

@@ -13,6 +13,8 @@ pub struct ProvidedRow {
     pub missing: Vec<String>,
     pub ambiguous: Vec<String>,
     pub ready: bool,
+    /// Recipe `source.note` (where to get the files). Empty when unset.
+    pub note: String,
 }
 
 #[derive(Clone)]
@@ -218,6 +220,10 @@ pub struct ModRow {
     /// Local payload holds files the recipe keeps — the `Files` preview gate.
     /// Probed while the rows are built, never during paint.
     pub payload_present: bool,
+    /// `provided` file status for a not-installed row; the picker paints
+    /// the missing names while it is not ready. `None` for other sources
+    /// and for installed rows.
+    pub provided: Option<ProvidedRow>,
     /// T24 precomputed paint ids, built once in `load_mods_for`.
     pub ids: ModIds,
 }

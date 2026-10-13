@@ -215,6 +215,7 @@ pub(super) fn build_window(ctx: &Ctx, cx: &mut App) -> Option<LiveWindow> {
                 add_form: None,
                 archive_password_input,
                 pending_archive_password: None,
+                pending_provide: None,
                 family_filter_input,
                 extras_filter_input,
                 packs_filter_input,

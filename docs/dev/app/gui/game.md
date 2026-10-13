@@ -300,7 +300,10 @@ ReShade | Custom) with the Settings Mods page’s subheads as visual breaks —
 kinds (officials first, like `pack_rows`). A section header is clickable and
 collapses that section (default expanded); subheads never collapse; empty
 sections and subheads paint nothing. Each row: clickable checkbox row + label (tooltip =
-Mod id) + previews. Multi-select. No game-level file add.
+Mod id) + previews. Multi-select. No game-level file add. A not-ready `provided`
+Mod (`gui.provide-during-install`) paints the recipe note plus its Missing /
+More than one match pattern lists under the name and stays checkable — Select
+Visible includes it; the files are asked for at install time, below.
 
 Row previews (Settings user-Mod cards follow the same rule): **Effects ▸**
 on effect Mods whose recipe carries an `EffectFiles` list (minted packs; names
@@ -333,7 +336,18 @@ manifests): one candidate paints as a `- Name` bullet, 2+ as one dep line with
 a horizontal glyph radio (`●`/`○`, first pre-selected, click to switch). One
 **Install required** queues the chosen deps topo-first, then the target, ahead
 of the rest. An empty closure, or a dep with no candidate, falls back to the
-single-miss card or the status line.
+single-miss card or the status line. `NeedsProvidedFiles` parks like the
+archive password (`gui.provide-during-install`): the page body becomes a
+Files needed card for the Mod core names — the checked Mod or a queued
+Install-required dep — with its label, recipe note, the Missing / More than
+one match / Present pattern lists, and **Provide files** + Cancel. Picks
+repeat while the set stays partial or ambiguous, and an encrypted archive
+detours through the password card and returns to the park. Once the payload
+is ready the same install retries with its stashed requires / `yes` / slot
+args and the queue continues; Cancel drops the batch and writes nothing.
+Switching to another game abandons the park and its batch, like the other
+install parks. The park holds the tray Hide veto, and the Live card drops
+with no toast — the card is the follow-up.
 
 Empty picker: “All applicable mods are installed” (or none apply). Install
 stays disabled.
@@ -351,8 +365,8 @@ and per 1% step.
 
 Success finishes the card as an **Activity** toast `Installed {label}`
 (`gui-notice-installed`, Ok, 5s autohide); a failure finishes it as an **Err**
-Activity that waits for X. `NeedConfirm` / `MissingRequires` finish the card with
-**no** toast — the confirm card, or the status line, is the follow-up.
+Activity that waits for X. `NeedConfirm` / `MissingRequires` / `NeedsProvidedFiles` finish the card with
+**no** toast — the confirm card, the Provide card, or the status line, is the follow-up.
 Overlay X snoozes that surface only (the install keeps running, confirm card unchanged);
 the finish toast un-snoozes it as a normal Activity toast. No cancel from X. Art,
 hero, host-install and scan are **not** Live.

@@ -111,6 +111,7 @@ impl Shell {
         self.clear_game_data();
         self.fetch_for_tab(cx);
         self.clear_pending_confirm();
+        self.clear_pending_provide();
         self.mods_picker_open = false;
         self.picker_checked.clear();
         self.install_queue.clear();

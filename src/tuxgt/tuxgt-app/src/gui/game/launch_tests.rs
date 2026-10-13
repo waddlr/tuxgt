@@ -210,6 +210,7 @@ fn mod_row(instance: &str, adapter: &str, installed: bool) -> ModRow {
         effect_files: Default::default(),
         asset: None,
         payload_present: true,
+        provided: None,
         ids: ModIds::for_instance(instance, "steam::1"),
     }
 }

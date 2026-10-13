@@ -20,8 +20,9 @@ pub(crate) fn load_mods_for(
         .and_then(|s| s.parse::<u32>().ok())
         .filter(|a| *a != 0);
     let inst = mods_for_game(&config_dir(), name, appid, &data).ok();
-    // Full catalog, including disabled and not-ready provided recipes.
-    // `mods_for_game` omits those so they are not offered for install.
+    // Full catalog, including disabled recipes. `mods_for_game` omits
+    // those so they are not offered for install; not-ready `provided`
+    // recipes stay in it and carry their file status on the row.
     let catalog = list_mods(&config_dir(), &data).ok();
     let manifests = game_manifests(&data, game_id).unwrap_or_default();
     let req_owned: Vec<Vec<&str>> = manifests
@@ -90,6 +91,7 @@ pub(crate) fn load_mods_for(
                     effect_files,
                     asset,
                     payload_present,
+                    provided: provided_status(&data, i).1,
                     ids,
                 });
             }
@@ -99,8 +101,9 @@ pub(crate) fn load_mods_for(
         if seen.contains(&m.instance) {
             continue;
         }
-        // Still in the catalog, just not offered (disabled, or provided
-        // files cleared). Keep its label, official flag, and metadata.
+        // Still in the catalog, just not offered (disabled; clearing a
+        // provided payload disables it). Keep its label, official flag,
+        // and metadata.
         if let Some(i) = catalog
             .as_ref()
             .and_then(|l| l.mods.iter().find(|i| i.id == m.instance))
@@ -197,6 +200,7 @@ pub(crate) fn mod_row_from_manifest(
         effect_files,
         asset,
         payload_present,
+        provided: None,
         ids,
     }
 }
@@ -333,7 +337,7 @@ pub(crate) fn load_instances() -> Vec<InstanceRow> {
 
 /// Note plus file status for a `provided` source. Other sources stay empty.
 /// A read error still paints: `ready` is false and the error is the missing line.
-fn provided_status(
+pub(crate) fn provided_status(
     data: &std::path::Path,
     inst: &tuxgt_core::Mod,
 ) -> (String, Option<ProvidedRow>) {
@@ -347,18 +351,21 @@ fn provided_status(
             missing: files.missing,
             ambiguous: files.ambiguous,
             ready: files.ready,
+            note: note.clone(),
         },
         Ok(None) => ProvidedRow {
             present: Vec::new(),
             missing: Vec::new(),
             ambiguous: Vec::new(),
             ready: false,
+            note: note.clone(),
         },
         Err(e) => ProvidedRow {
             present: Vec::new(),
             missing: vec![e.to_string()],
             ambiguous: Vec::new(),
             ready: false,
+            note: note.clone(),
         },
     };
     (note, Some(provided))

@@ -150,7 +150,7 @@ pub async fn install_instance(
         if !pf.ready {
             let mut names = pf.missing.clone();
             names.extend(pf.ambiguous.iter().cloned());
-            return Err(Error::InvalidInstance(format!(
+            return Err(Error::NeedsProvidedFiles(format!(
                 "{}: files not provided: {}",
                 inst.id,
                 names.join(", ")

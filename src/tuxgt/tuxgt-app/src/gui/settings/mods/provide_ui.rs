@@ -149,6 +149,11 @@ pub(crate) fn prompt_provide_with_password(
             view.update(cx, |this, cx| {
                 match result {
                     Ok((_report, rows)) => {
+                        // An install parked on this Mod's files retries
+                        // (or refreshes its pattern snapshot) from the
+                        // same reload; no park here means Settings-page
+                        // providing, which only refreshes below.
+                        this.resume_after_provide(&refresh_id, &rows, cx);
                         if this.instances_showing() {
                             this.instances = rows.into_boxed_slice();
                         }

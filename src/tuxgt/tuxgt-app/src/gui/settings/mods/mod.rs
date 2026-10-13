@@ -12,7 +12,8 @@ use super::super::{ConfigNavPending, InstanceRow, SettingsModsTab, Shell};
 mod card;
 mod provide_ui;
 
-pub(crate) use provide_ui::prompt_provide_with_password;
+pub(crate) use card::pattern_list;
+pub(crate) use provide_ui::{pick_provide, prompt_provide_with_password};
 
 impl Shell {
     pub(crate) fn settings_mods(&self, view: Entity<Self>, cx: &App) -> impl IntoElement {

@@ -224,6 +224,13 @@ impl Shell {
         let click_view = view.clone();
         let click_id = id.clone();
         let click_on = !checked.iter().any(|c| c == &id);
+        // A not-ready `provided` row stays checkable; its note and
+        // missing names paint under the name (files are asked for
+        // when the install runs, not here).
+        let provided_els = match &row.provided {
+            Some(p) if !p.ready => self.provided_lines(p, false, cx),
+            _ => Vec::new(),
+        };
         v_flex()
             .w_full()
             .child(
@@ -264,6 +271,7 @@ impl Shell {
                     .children(preview_buttons),
             )
             .children(preview_bodies)
+            .children(provided_els)
             .into_any_element()
     }
 

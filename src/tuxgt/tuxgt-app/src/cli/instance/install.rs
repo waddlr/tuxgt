@@ -58,6 +58,13 @@ pub(crate) async fn install_mod_cli(
                 )
                 .into());
             }
+            Err(Error::NeedsProvidedFiles(msg)) => {
+                let who = msg.split(':').next().map(str::trim).unwrap_or(&msg);
+                return Err(format!(
+                    "{msg}; provide them first: tuxgt mods provide {who} --path <file-or-archive-or-dir>"
+                )
+                .into());
+            }
             Err(Error::NeedConfirm(msg)) if !opts.yes => {
                 confirm_list("foreign game-dir dests", &msg_items(&msg), false)?;
                 opts.yes = true;

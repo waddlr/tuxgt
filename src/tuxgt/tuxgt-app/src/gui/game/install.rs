@@ -140,8 +140,9 @@ impl Shell {
     }
 
     /// R12: a finished transfer stops owning the Hide veto, but the work it
-    /// left behind in this window does not: a parked E34 confirm and the
-    /// instances queued behind it would be dropped by a Hide. Hand the
+    /// left behind in this window does not: a parked E34 confirm, a parked
+    /// Provide card, and the instances queued behind them would be dropped
+    /// by a Hide. Hand the
     /// guard to the Shell in that case, so the veto survives exactly as
     /// long as the work does; with nothing parked the guard drops here and
     /// Close is free again.
@@ -156,6 +157,7 @@ impl Shell {
             Some(PendingArchivePassword::Install { .. })
         );
         if password_parked
+            || self.pending_provide.is_some()
             || install_work_parked(&self.install_queue, self.pending_confirm.as_ref())
         {
             self.install_hold = Some(transfer);
@@ -257,6 +259,7 @@ impl Shell {
                     Err(Error::MissingRequires(_)) => "missing-requires",
                     Err(Error::NeedConfirm(_)) => "need-confirm",
                     Err(Error::NeedSlotChoice(_)) => "need-slot-choice",
+                    Err(Error::NeedsProvidedFiles(_)) => "needs-provided-files",
                     Err(Error::ArchivePasswordRequired) => "need-password",
                     Err(_) => "error",
                 };
@@ -285,6 +288,10 @@ impl Shell {
                         this.drop_install_live(&done, &inst_cb, cx);
                     }
                     Err(Error::ArchivePasswordRequired) => {
+                        this.drop_install_live(&done, &inst_cb, cx);
+                    }
+                    Err(Error::NeedsProvidedFiles(_)) => {
+                        // The Provide card is the follow-up; no toast.
                         this.drop_install_live(&done, &inst_cb, cx);
                     }
                     Err(e) => {
@@ -426,6 +433,16 @@ impl Shell {
                             },
                             picks: this.picks_for(&done, confirm_dests(&msg), PickKind::Recipe),
                         });
+                    }
+                    Err(Error::NeedsProvidedFiles(msg)) => {
+                        this.park_provide(
+                            done.clone(),
+                            inst_cb.clone(),
+                            &msg,
+                            with_requires,
+                            yes,
+                            slot_cb,
+                        );
                     }
                     Err(Error::ArchivePasswordRequired) => {
                         if tried_password {

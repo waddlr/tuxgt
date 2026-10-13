@@ -30,6 +30,7 @@ mod picker;
 mod picker_tests;
 mod picker_util;
 mod play;
+mod provide_park;
 mod rows;
 mod slot_choice;
 mod slot_picks;

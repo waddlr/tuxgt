@@ -126,6 +126,7 @@ pub struct Shell {
     pub(crate) add_form: Option<Entity<AddForm>>,
     pub(crate) archive_password_input: Entity<InputState>,
     pub(crate) pending_archive_password: Option<PendingArchivePassword>,
+    pub(crate) pending_provide: Option<PendingProvide>,
     pub(crate) add_sync_queued: bool,
     /// E91 per-row dest inputs for the open Add/Rescan form, index-aligned
     /// with its files. Built once in render (creation needs `window`) and

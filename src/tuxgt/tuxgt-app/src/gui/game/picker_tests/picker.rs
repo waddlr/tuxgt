@@ -140,6 +140,38 @@ fn picker_targets_skip_collapsed_sections() {
     );
 }
 
+/// A not-ready `provided` Mod is offered like any other not-installed
+/// Mod and sits inside Select Visible scope: checking it is what makes
+/// the install ask for its files. An installed row stays out whatever
+/// its provided status says.
+#[test]
+fn picker_offers_not_ready_provided_mods() {
+    let needs_files = super::super::super::ProvidedRow {
+        present: Vec::new(),
+        missing: vec!["sl.common.dll".to_string()],
+        ambiguous: Vec::new(),
+        ready: false,
+        note: String::new(),
+    };
+    let mut pending = row("nvidia-streamline", "custom", false);
+    pending.provided = Some(needs_files.clone());
+    let mut on_game = row("nvngx-dlssnr", "custom", true);
+    on_game.provided = Some(needs_files);
+    let rows = vec![on_game, pending];
+    let picked = picker_rows(rows);
+    assert_eq!(
+        picked
+            .iter()
+            .map(|r| r.instance.as_str())
+            .collect::<Vec<_>>(),
+        ["nvidia-streamline"]
+    );
+    assert_eq!(
+        picker_targets(&picked, &HashSet::new(), ""),
+        ["nvidia-streamline"]
+    );
+}
+
 /// Installed Uninstall-visible scope: collapsed sections are excluded, ids
 /// stay in paint (section-major) order. Collapsing everything empties the
 /// scope but the tab is not empty — collapsed headers still paint.

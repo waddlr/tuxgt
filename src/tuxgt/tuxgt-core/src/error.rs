@@ -116,6 +116,11 @@ pub enum Error {
     Update(String),
     #[error("missing requires type {0}")]
     MissingRequires(String),
+    /// A `provided` source whose payload is not ready. The payload is
+    /// `{mod id}: files not provided: {names}` (the `NeedSlotChoice`
+    /// string shape: callers split on the first `:` for the id).
+    #[error("{0}")]
+    NeedsProvidedFiles(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

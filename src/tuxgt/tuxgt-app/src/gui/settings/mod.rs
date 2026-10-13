@@ -31,6 +31,7 @@ mod update_live;
 pub(crate) use add_pick::*;
 pub(crate) use add_scan::*;
 pub(crate) use export::*;
+pub(crate) use mods::{pattern_list, pick_provide};
 pub(crate) use update::AppUpdate;
 pub(crate) use update_live::AppUpdateLive;
 

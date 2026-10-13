@@ -1,3 +1,23 @@
+use super::rows::ProvidedRow;
+
+/// An install parked until a `provided` Mod's files land. `target` is
+/// the install call to retry; `needs` is the Mod core named not ready
+/// (the target itself, or a dep the batch queued ahead of it). The
+/// `provided` snapshot refreshes after every pick, so the card's
+/// pattern lists stay current while the set is partial or ambiguous.
+/// Ready retries the install; Cancel drops the batch (disk unchanged).
+#[derive(Clone)]
+pub struct PendingProvide {
+    pub game: String,
+    pub target: String,
+    pub needs: String,
+    pub label: String,
+    pub provided: ProvidedRow,
+    pub with_requires: Option<String>,
+    pub yes: bool,
+    pub slot: Option<String>,
+}
+
 /// E34 pending install/enable/uninstall confirm. `None` = no dialog.
 /// Confirm retries the stashed op; Cancel drops it (disk unchanged).
 #[derive(Clone)]

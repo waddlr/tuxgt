@@ -39,7 +39,7 @@ fn two_unfiltered_hits_stay_ambiguous() {
 }
 
 #[test]
-fn partial_set_is_omitted_until_ready() {
+fn partial_set_is_listed_before_ready() {
     let (dir, data, cfg) = scratch("part");
     let one = dir.join("one");
     write_tree(&one, "sl.pcl.dll", b"pcl");
@@ -53,8 +53,10 @@ fn partial_set_is_omitted_until_ready() {
     assert!(!payload(&data, "nvidia-streamline")
         .join(".provenance.toml")
         .exists());
+    // Not ready is no longer hidden: the picker lists the mod and the
+    // install gate (not the listing) stops it until files land.
     let listed = mods_for_game(&cfg, "Any Game", None, &data).unwrap();
-    assert!(listed.mods.iter().all(|m| m.id != "nvidia-streamline"));
+    assert!(listed.mods.iter().any(|m| m.id == "nvidia-streamline"));
     assert!(listed.mods.iter().any(|m| m.id == "reshade"));
 
     let rest = dir.join("rest");
@@ -77,6 +79,18 @@ fn partial_set_is_omitted_until_ready() {
         fs::read(payload(&data, "nvidia-streamline").join("sl.pcl.dll")).unwrap(),
         b"pcl"
     );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// Not-ready no longer hides a provided mod, but disabled still does:
+/// a cleared payload (which disables the mod) stays out of the picker.
+#[test]
+fn disabled_not_ready_stays_unlisted() {
+    let (dir, data, cfg) = scratch("dis");
+    crate::disable_mod(&cfg, "nvidia-streamline", &data).unwrap();
+    let listed = mods_for_game(&cfg, "Any Game", None, &data).unwrap();
+    assert!(listed.mods.iter().all(|m| m.id != "nvidia-streamline"));
+    assert!(listed.mods.iter().any(|m| m.id == "reshade"));
     let _ = fs::remove_dir_all(&dir);
 }
 

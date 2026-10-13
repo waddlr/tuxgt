@@ -227,14 +227,9 @@ pub fn mods_for_game(
         if !i.enabled || !applies {
             continue;
         }
-        if matches!(&i.source, SourceRef::Provided { .. }) {
-            let ready = crate::provided_files(data_dir, &i)?
-                .map(|p| p.ready)
-                .unwrap_or(true);
-            if !ready {
-                continue;
-            }
-        }
+        // A not-ready `provided` mod stays listed: the picker shows its
+        // missing names and `install_instance` is the gate that stops it
+        // (`Error::NeedsProvidedFiles`), not this listing.
         kept.push(i);
     }
     list.mods = kept;

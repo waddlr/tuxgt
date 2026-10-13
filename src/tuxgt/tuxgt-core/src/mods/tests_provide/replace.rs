@@ -60,7 +60,9 @@ async fn install_waits_for_files_then_lands_without_download() {
     )
     .await
     .unwrap_err();
+    // The typed park error is what the GUI matches to ask for files.
     let msg = err.to_string();
+    assert!(matches!(err, crate::Error::NeedsProvidedFiles(_)), "{msg}");
     assert!(msg.contains("files not provided"), "{msg}");
     assert!(msg.contains("sl.common.dll"), "{msg}");
     assert!(crate::read_manifest(&data, gid, "nvidia-streamline")
@@ -270,5 +272,49 @@ async fn partial_reprovide_does_not_publish_a_digest() {
         still.provenance.asset_sha256,
         installed.provenance.asset_sha256
     );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// A `--with-requires` dep that is itself not ready stops the nested
+/// install naming the dep, not the target, and writes no manifest for
+/// either — the GUI park parses that id to ask for the dep's files.
+#[tokio::test]
+async fn nested_require_names_the_not_ready_dep() {
+    let (dir, data, cfg) = scratch("nested");
+    let pool = crate::open_db(&data).await.unwrap();
+    let gid = "manual:standalone:provide-nested";
+    seed_game(
+        &pool,
+        SeedGame {
+            id: gid,
+            name: Some("Provide Nested"),
+            ..Default::default()
+        },
+    )
+    .await;
+    let pkg = dir.join("targetpkg");
+    write_tree(&pkg, "target.dll", b"dll");
+    let recipe = format!(
+        "id = \"needs-streamline\"\ntype = \"custom\"\nlabel = \"needs streamline\"\nrequires = [\"nvidia-streamline\"]\n[source]\ntype = \"local\"\npath = \"{}\"\n",
+        pkg.to_str().unwrap()
+    );
+    let src = dir.join("needs-streamline.toml");
+    fs::write(&src, recipe).unwrap();
+    crate::add_mod(&cfg, &src, &data).unwrap();
+    let opts = InstallOpts {
+        with_requires: Some("nvidia-streamline".into()),
+        ..InstallOpts::default()
+    };
+    let err = install_instance(&pool, &data, &cfg, gid, "needs-streamline", &opts, None)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, crate::Error::NeedsProvidedFiles(_)), "{err}");
+    assert!(err.to_string().starts_with("nvidia-streamline:"), "{err}");
+    assert!(crate::read_manifest(&data, gid, "nvidia-streamline")
+        .unwrap()
+        .is_none());
+    assert!(crate::read_manifest(&data, gid, "needs-streamline")
+        .unwrap()
+        .is_none());
     let _ = fs::remove_dir_all(&dir);
 }

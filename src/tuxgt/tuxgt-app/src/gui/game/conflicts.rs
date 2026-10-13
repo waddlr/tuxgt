@@ -102,6 +102,7 @@ mod tests {
             effect_files: Box::default(),
             asset: None,
             payload_present: false,
+            provided: None,
             ids: ModIds::for_instance(instance, "test-game"),
         }
     }
