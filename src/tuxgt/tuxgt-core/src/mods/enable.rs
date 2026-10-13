@@ -3,9 +3,10 @@ use std::path::Path;
 
 use sqlx::SqlitePool;
 
+use crate::install::{claim_inventory, remove_with_promotion};
 use crate::{
-    apply_copies, plan_copies, prewire_game, remove_copies, tracked_dests, write_manifest, Error,
-    FileManifest, Result,
+    apply_copies, plan_copies, prewire_game, write_manifest, Error, FileManifest, InstallMaterial,
+    Result,
 };
 
 pub async fn set_instance_enabled(
@@ -61,7 +62,7 @@ pub async fn set_instance_enabled(
         let root = crate::game_root(pool, game).await?;
         let prefix =
             crate::install::prefix_for(pool, game, m.files.iter().map(|f| f.dest.as_str())).await?;
-        let tracked = tracked_dests(data_dir, game)?;
+        let claims = claim_inventory(data_dir, game)?;
         let ops = plan_copies(
             data_dir,
             game,
@@ -69,7 +70,8 @@ pub async fn set_instance_enabled(
             m.files.iter().filter(|f| f.enabled),
             &root,
             prefix.as_deref(),
-            &tracked,
+            InstallMaterial::of(&m.adapter),
+            &claims,
         )?;
         let need: Vec<String> = ops
             .iter()
@@ -89,7 +91,7 @@ pub async fn set_instance_enabled(
         let root = crate::game_root(pool, game).await?;
         let prefix =
             crate::install::prefix_for(pool, game, m.files.iter().map(|f| f.dest.as_str())).await?;
-        let tracked = tracked_dests(data_dir, game)?;
+        let claims = claim_inventory(data_dir, game)?;
         if on {
             let ops = plan_copies(
                 data_dir,
@@ -98,7 +100,8 @@ pub async fn set_instance_enabled(
                 m.files.iter().filter(|f| f.enabled),
                 &root,
                 prefix.as_deref(),
-                &tracked,
+                InstallMaterial::of(&m.adapter),
+                &claims,
             )?;
             // Confirm pre-settled above (same plan inputs).
             apply_copies(
@@ -108,19 +111,26 @@ pub async fn set_instance_enabled(
                 &root,
                 prefix.as_deref(),
                 &ops,
-                &tracked,
+                &claims,
             )?;
         } else {
-            let dests = m.files.iter().map(|f| f.dest.as_str());
-            let removal = remove_copies(
+            let excluded = m
+                .files
+                .iter()
+                .map(|f| (m.instance.clone(), f.dest.clone()))
+                .collect();
+            let dests = m.files.iter().map(|f| f.dest.clone()).collect::<Vec<_>>();
+            let outcome = remove_with_promotion(
                 data_dir,
+                game,
+                m.clone(),
+                &excluded,
                 &mut m.backups,
-                dests,
+                &dests,
                 &root,
                 prefix.as_deref(),
-                &tracked,
             )?;
-            restored.extend(removal.restored);
+            restored.extend(outcome.removal.restored);
             write_manifest(data_dir, &m)?;
         }
     }

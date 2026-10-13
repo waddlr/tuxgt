@@ -183,32 +183,36 @@ async fn convert(fx: &Fx, target: &str, yes: bool) -> crate::Result<ConversionRe
 async fn assert_consistent(fx: &Fx, adapter: &str) {
     assert_eq!(game_adapter(&fx.pool, &fx.gid).await.unwrap(), adapter);
     assert_eq!(fx.manifest().adapter, adapter);
-    let tracked = crate::tracked_dests(&fx.data, &fx.gid).unwrap();
     for f in fx.manifest().files.iter() {
         let p = fx.dest(&f.dest);
+        let staged = crate::stage::stage_dir(&fx.data, &fx.gid, &fx.iid).join(&f.dest);
         if adapter == ADAPTER_INSTALL {
             assert!(p.is_file(), "{} must be copied into the game dir", f.dest);
-            assert_eq!(
-                fs::read(&p).unwrap(),
-                fs::read(crate::stage::stage_dir(&fx.data, &fx.gid, &fx.iid).join(&f.dest))
-                    .unwrap()
+            assert_eq!(fs::read(&p).unwrap(), fs::read(&staged).unwrap());
+        } else if adapter == crate::game::ADAPTER_INSTALL_LINKS {
+            assert!(
+                fs::symlink_metadata(&p).is_ok_and(|meta| meta.file_type().is_symlink()),
+                "{} must be linked into the game dir",
+                f.dest
             );
+            assert_eq!(fs::read_link(&p).unwrap(), staged);
         } else {
-            // Preload keeps nothing of ours in the game dir. A dest that is
-            // still there was restored to the user's own content, so it
-            // must not be the tracked payload any more.
+            // Preload keeps nothing of ours in the game dir: no symlink may
+            // still point at our staging, and any leftover file must hold
+            // foreign bytes, never our payload.
+            let our_link = fs::symlink_metadata(&p).is_ok_and(|meta| meta.file_type().is_symlink())
+                && fs::read_link(&p).is_ok_and(|target| target == staged);
+            assert!(!our_link, "{} still links our staging", f.dest);
             if p.is_file() {
                 assert_ne!(
                     fs::read(&p).unwrap(),
-                    fs::read(crate::stage::stage_dir(&fx.data, &fx.gid, &fx.iid).join(&f.dest))
-                        .unwrap(),
+                    fs::read(&staged).unwrap(),
                     "{} still holds the tracked payload",
                     f.dest
                 );
             }
         }
     }
-    assert!(!tracked.is_empty());
 }
 
 #[tokio::test]

@@ -100,6 +100,7 @@ pub(crate) fn resolve_slot_dest(slot: &str, stock: &str) -> Result<String> {
 /// to `<self>` can default to yes and Streamline is never in the list.
 pub(crate) fn conversion_needs_prompt(
     target_install: bool,
+    source_install: bool,
     mod_type: &str,
     recipe_slot: Option<&str>,
     files: &[PlannedFile],
@@ -109,7 +110,8 @@ pub(crate) fn conversion_needs_prompt(
         return false;
     }
     if target_install {
-        return true;
+        // Preload arrivals need a pick; Copy↔Links keeps dest names.
+        return !source_install;
     }
     let Some(idx) = claiming_slot_index(files, include) else {
         return false;
@@ -307,10 +309,11 @@ mod tests {
         // include covers every DLL, so none of them claim a proxy slot.
         assert!(!recipe_slot_configurable("custom", None));
         assert!(!conversion_needs_prompt(
-            true, "custom", None, &files, &include,
+            true, false, "custom", None, &files, &include,
         ));
         assert!(conversion_needs_prompt(
             true,
+            false,
             "reshade",
             Some("dxgi"),
             &[file("ReShade64.dll", "ReShade64.dll")],
@@ -318,6 +321,7 @@ mod tests {
         ));
         assert!(!conversion_needs_prompt(
             false,
+            true,
             "reshade",
             Some("dxgi"),
             &[file("ReShade64.dll", "ReShade64.dll")],
@@ -325,6 +329,17 @@ mod tests {
         ));
         assert!(conversion_needs_prompt(
             false,
+            true,
+            "reshade",
+            Some("dxgi"),
+            &[file("ReShade64.dll", "dxgi.dll")],
+            &[],
+        ));
+        // Copy↔Links never changes dest names, so no pick even for a
+        // slot-configurable mod in either direction.
+        assert!(!conversion_needs_prompt(
+            true,
+            true,
             "reshade",
             Some("dxgi"),
             &[file("ReShade64.dll", "dxgi.dll")],
@@ -369,6 +384,7 @@ mod tests {
         assert_eq!(files[idx].dest, "OptiScaler.dll");
         assert!(conversion_needs_prompt(
             true,
+            false,
             "optiscaler",
             Some("dxgi"),
             &files,

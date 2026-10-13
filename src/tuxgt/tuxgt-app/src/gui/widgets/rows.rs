@@ -100,11 +100,12 @@ pub(crate) fn val_table(kind: ValKind) -> &'static [(&'static str, &'static str)
             ("effect", "gui-modtype-effect"),
             ("texture", "gui-modtype-texture"),
         ],
-        // R37: only the two selectable adapters. `proton_env` is a recipe
+        // R37: the three selectable adapters. `proton_env` is a recipe
         // Plan (Proton's built-in OptiScaler), not a user choice.
         ValKind::Adapter => &[
             ("preload", "gui-adapter-preload"),
             ("install", "gui-adapter-install"),
+            ("install-links", "gui-adapter-links"),
         ],
     };
     table

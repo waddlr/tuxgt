@@ -66,17 +66,17 @@ pub use env::{
 };
 pub use game::{
     add_manual, add_manual_full, ensure_install_allowed, game_adapter, game_api, game_dir,
-    game_exists, game_launch_config, game_rel, game_row_by_id, is_install, is_preload,
+    game_exists, game_launch_config, game_rel, game_row_by_id, is_install, is_links, is_preload,
     list_game_index, list_games, recent_games, remove_manual, scan_games, scan_games_opts,
     set_game_adapter, set_hidden_override, set_steam_appid, steam_appid_of, touch_last_played,
     validate_adapter, wow64_warn, GameId, GameIndexRow, GameLaunchConfig, GameRow, Wow64Source,
-    ADAPTER_INSTALL, ADAPTER_PRELOAD,
+    ADAPTER_INSTALL, ADAPTER_INSTALL_LINKS, ADAPTER_PRELOAD,
 };
 pub use install::{
     apply_copies, foreign_dest, foreign_occupied, game_root, is_prefix_dest, load_conflicts,
     need_manifest, other_claims, plan_copies, plan_dest_copy, prefix_drive_c, prefix_for,
-    prefix_rel, prefix_root, remove_copies, remove_dest_copy, tracked_dests, validate_prefix_dests,
-    CopyOp, LoadConflict, Removal, PREFIX_DEST_PREFIX,
+    prefix_rel, prefix_root, remove_copies, remove_dest_copy, validate_prefix_dests, CopyOp,
+    InstallMaterial, LoadConflict, Removal, PREFIX_DEST_PREFIX,
 };
 pub use instance::{
     add_mod, add_mod_from, add_mod_from_with_password, add_mod_with_password, apply_package_slot,

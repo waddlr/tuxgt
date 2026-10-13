@@ -13,10 +13,10 @@ pub(crate) use migrate::*;
 
 pub(crate) use adapter::restore_game_adapter;
 pub use adapter::{
-    ensure_install_allowed, game_adapter, game_api, is_install, is_preload, set_game_adapter,
-    validate_adapter,
+    ensure_install_allowed, game_adapter, game_api, is_install, is_links, is_preload,
+    set_game_adapter, validate_adapter,
 };
-pub use adapter::{ADAPTER_INSTALL, ADAPTER_PRELOAD};
+pub use adapter::{ADAPTER_INSTALL, ADAPTER_INSTALL_LINKS, ADAPTER_PRELOAD};
 pub use appid::{set_steam_appid, steam_appid_of};
 pub use id::{game_dir, game_rel, GameId, STANDALONE};
 pub use index::{
@@ -37,5 +37,7 @@ mod tests_0;
 mod tests_1;
 #[cfg(test)]
 mod tests_2;
+#[cfg(test)]
+mod tests_adapter;
 #[cfg(test)]
 mod tests_wow64;

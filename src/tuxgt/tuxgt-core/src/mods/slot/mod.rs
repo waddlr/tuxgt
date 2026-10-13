@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 use sqlx::SqlitePool;
 
 use super::*;
+use crate::install::{claim_inventory, remove_with_promotion};
 use crate::stage::{sync_staging, StageInput};
 use crate::{
-    apply_copies, plan_copies, tracked_dests, write_manifest, Error, FileManifest, PlannedFile,
+    apply_copies, plan_copies, write_manifest, Error, FileManifest, InstallMaterial, PlannedFile,
     Result,
 };
 
@@ -27,6 +28,7 @@ pub use choice::{
 };
 pub(crate) use modes::forget_instance;
 pub use modes::remembered_slot;
+pub(crate) use modes::seed_install_links_token;
 pub use push::{payload_drift, push_global_edits, push_global_edits_all, PushReport};
 pub use unplace_convert::{convert_after_unplace, preflight_convert_picks};
 
@@ -203,8 +205,8 @@ async fn rewrite_instance_slot(
         let root = crate::game_root(pool, game).await?;
         let prefix =
             crate::install::prefix_for(pool, game, [new_dest.as_str()].into_iter()).await?;
-        let tracked = crate::tracked_dests(data_dir, game)?;
-        if crate::install::dest_needs_confirm(&new_dest, &root, prefix.as_deref(), &tracked)? {
+        let claims = claim_inventory(data_dir, game)?;
+        if crate::install::dest_needs_confirm(&new_dest, &root, prefix.as_deref(), &claims)? {
             return Err(Error::NeedConfirm(format!(
                 "foreign game-dir dests: {new_dest}"
             )));
@@ -248,22 +250,27 @@ async fn rewrite_instance_slot(
             [old_dest.as_str(), new_dest.as_str()].into_iter(),
         )
         .await?;
-        // While the manifest still names the old dest, that game-dir copy
-        // is tracked and comes out. Rewriting the dest first would leave
-        // the proxy DLL behind (the game would keep loading it).
-        let tracked = crate::tracked_dests(data_dir, game)?;
-        let _ = crate::install::remove_dest_copy(
+        // While the manifest still names the old dest, that game-dir claim
+        // comes out (or passes to the next claimant). Rewriting the dest
+        // first would leave the proxy DLL behind (the game would keep
+        // loading it).
+        let excluded = [(m.instance.clone(), old_dest.clone())]
+            .into_iter()
+            .collect();
+        let _ = remove_with_promotion(
             data_dir,
-            &mut m,
-            &old_dest,
+            game,
+            m.clone(),
+            &excluded,
+            &mut m.backups,
+            &[old_dest.clone()],
             &root,
             prefix.as_deref(),
-            &tracked,
         )?;
         m.files[idx].dest = new_dest.clone();
         crate::write_manifest(data_dir, &m)?;
         if place {
-            let tracked = crate::tracked_dests(data_dir, game)?;
+            let claims = claim_inventory(data_dir, game)?;
             let ops = crate::install::plan_dest_copy(
                 data_dir,
                 game,
@@ -271,7 +278,7 @@ async fn rewrite_instance_slot(
                 &new_dest,
                 &root,
                 prefix.as_deref(),
-                &tracked,
+                &claims,
             )?;
             crate::apply_copies(
                 data_dir,
@@ -280,7 +287,7 @@ async fn rewrite_instance_slot(
                 &root,
                 prefix.as_deref(),
                 &ops,
-                &tracked,
+                &claims,
             )?;
         }
     } else {
@@ -336,7 +343,7 @@ pub async fn set_load_order(
         write_manifest(data_dir, &m)?;
         ordered.push(m);
     }
-    // Re-apply install-adapter copies top-to-bottom so on-disk bytes match
+    // Re-apply game-dir claims top-to-bottom so on-disk content matches
     // the new winner. Thread the in-memory struct through (it persists
     // `backups`); explicit user reorder, so `--yes`, no confirm.
     if ordered
@@ -344,7 +351,7 @@ pub async fn set_load_order(
         .any(|m| crate::is_install(&m.adapter) && m.enabled)
     {
         let root = crate::game_root(pool, game).await?;
-        let tracked = tracked_dests(data_dir, game)?;
+        let claims = claim_inventory(data_dir, game)?;
         for m in ordered
             .iter_mut()
             .filter(|m| crate::is_install(&m.adapter) && m.enabled)
@@ -365,9 +372,10 @@ pub async fn set_load_order(
                 m.files.iter().filter(|f| f.enabled),
                 &root,
                 prefix.as_deref(),
-                &tracked,
+                InstallMaterial::of(&m.adapter),
+                &claims,
             )?;
-            apply_copies(data_dir, game, m, &root, prefix.as_deref(), &ops, &tracked)?;
+            apply_copies(data_dir, game, m, &root, prefix.as_deref(), &ops, &claims)?;
         }
     }
     crate::prewire_game(data_dir, pool, game).await?;

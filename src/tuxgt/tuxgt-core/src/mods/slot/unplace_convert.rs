@@ -63,10 +63,10 @@ pub async fn preflight_convert_picks(
     }
     let root = crate::game_root(pool, game).await?;
     let prefix = crate::install::prefix_for(pool, game, need.iter().map(String::as_str)).await?;
-    let tracked = crate::tracked_dests(data_dir, game)?;
+    let claims = crate::install::claim_inventory(data_dir, game)?;
     let mut foreign = Vec::new();
     for dest in &need {
-        if crate::install::dest_needs_confirm(dest, &root, prefix.as_deref(), &tracked)?
+        if crate::install::dest_needs_confirm(dest, &root, prefix.as_deref(), &claims)?
             && !foreign.iter().any(|d| d == dest)
         {
             foreign.push(dest.clone());

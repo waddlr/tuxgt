@@ -75,5 +75,17 @@ fn load_conflicts_groups_enabled_only() {
     b.adapter = "install".into();
     crate::write_manifest(&data, &b).unwrap();
     assert!(load_conflicts(&data, game).unwrap().is_empty());
+    let mut c = test_manifest(game, "ccc", "shared.fx", "h3");
+    c.adapter = "install-links".into();
+    c.load_order = 2;
+    crate::write_manifest(&data, &c).unwrap();
+    let groups = load_conflicts(&data, game).unwrap();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].dest, "shared.fx");
+    assert_eq!(groups[0].adapter, "install");
+    assert_eq!(
+        &groups[0].instances[..],
+        ["bbb".to_string(), "ccc".to_string()]
+    );
     let _ = fs::remove_dir_all(&data);
 }

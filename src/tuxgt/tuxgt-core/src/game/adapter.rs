@@ -3,31 +3,37 @@ use sqlx::SqlitePool;
 use super::*;
 use crate::{Error, Result};
 
-/// R37: the two adapter kinds. `preload` injects through the managed loader
-/// ini, `install` copies the proxy payload into the game dir / prefix.
-/// Single vocabulary for every adapter decision in the workspace, so a new
-/// kind cannot be half-accepted.
+/// R37: the three adapter kinds. `preload` injects through the managed loader
+/// ini, `install` copies the proxy payload into the game dir / prefix, and
+/// `install-links` links it there from staging. Single vocabulary for every
+/// adapter decision in the workspace, so a new kind cannot be half-accepted.
 pub const ADAPTER_PRELOAD: &str = "preload";
 pub const ADAPTER_INSTALL: &str = "install";
+pub const ADAPTER_INSTALL_LINKS: &str = "install-links";
 
-/// Validate one adapter value: trimmed, and exactly one of the two kinds.
+/// Validate one adapter value: trimmed, and exactly one of the three kinds.
 /// Returns the canonical spelling. Callers validate before any write, so an
 /// unknown value never reaches the database.
 pub fn validate_adapter(adapter: &str) -> Result<&str> {
     match adapter.trim() {
-        a @ (ADAPTER_PRELOAD | ADAPTER_INSTALL) => Ok(a),
+        a @ (ADAPTER_PRELOAD | ADAPTER_INSTALL | ADAPTER_INSTALL_LINKS) => Ok(a),
         _ => Err(Error::InvalidInstance(format!(
-            "unknown adapter: {} (preload|install)",
+            "unknown adapter: {} (preload|install|install-links)",
             adapter.trim()
         ))),
     }
 }
 
-/// `true` for the install adapter. Every "is this install-adapter state"
+/// `true` for either game-dir adapter. Every "is this game-dir state"
 /// check funnels through this so a third kind cannot read as preload by
 /// accident.
 pub fn is_install(adapter: &str) -> bool {
-    adapter == ADAPTER_INSTALL
+    adapter == ADAPTER_INSTALL || adapter == ADAPTER_INSTALL_LINKS
+}
+
+/// `true` only for the staged-symlink materialization.
+pub fn is_links(adapter: &str) -> bool {
+    adapter == ADAPTER_INSTALL_LINKS
 }
 
 /// `true` for the preload adapter.
@@ -66,7 +72,7 @@ pub async fn game_api(pool: &SqlitePool, id: &str) -> Result<Option<String>> {
 }
 
 /// Vulkan games are preload-only: no proxy DLL loads in a Vulkan game, so
-/// the install adapter is refused before any write. Preload, unknown, and
+/// either install adapter is refused before any write. Preload, unknown, and
 /// empty APIs pass; `extra_apis` never gates.
 pub async fn ensure_install_allowed(pool: &SqlitePool, id: &str, adapter: &str) -> Result<()> {
     if !is_install(adapter) {

@@ -3,7 +3,8 @@ use std::path::Path;
 use sqlx::SqlitePool;
 
 use super::*;
-use crate::{apply_copies, prewire_game, tracked_dests, Error, FileManifest, Result};
+use crate::install::{claim_inventory, remove_with_promotion};
+use crate::{apply_copies, prewire_game, write_manifest, Error, FileManifest, Result};
 
 pub async fn set_file_keep(
     pool: &SqlitePool,
@@ -31,8 +32,8 @@ pub async fn set_file_keep(
         // refused enable leaves the manifest and staging byte-identical.
         let root = crate::game_root(pool, game).await?;
         let prefix = crate::install::prefix_for(pool, game, [dest].into_iter()).await?;
-        let tracked = tracked_dests(data_dir, game)?;
-        if crate::install::dest_needs_confirm(dest, &root, prefix.as_deref(), &tracked)? {
+        let claims = claim_inventory(data_dir, game)?;
+        if crate::install::dest_needs_confirm(dest, &root, prefix.as_deref(), &claims)? {
             return Err(Error::NeedConfirm(format!(
                 "foreign game-dir dests: {dest}"
             )));
@@ -86,7 +87,7 @@ pub async fn set_file_keep(
     if crate::is_install(&m.adapter) {
         let root = crate::game_root(pool, game).await?;
         let prefix = crate::install::prefix_for(pool, game, [dest].into_iter()).await?;
-        let tracked = tracked_dests(data_dir, game)?;
+        let claims = claim_inventory(data_dir, game)?;
         if on {
             // The foreign-overwrite confirm was settled before any mutation
             // above, so with `yes` this is a straight apply with a backup.
@@ -97,7 +98,7 @@ pub async fn set_file_keep(
                 dest,
                 &root,
                 prefix.as_deref(),
-                &tracked,
+                &claims,
             )?;
             apply_copies(
                 data_dir,
@@ -106,17 +107,23 @@ pub async fn set_file_keep(
                 &root,
                 prefix.as_deref(),
                 &ops,
-                &tracked,
+                &claims,
             )?;
         } else {
-            let _ = crate::install::remove_dest_copy(
+            let excluded = [(m.instance.clone(), dest.to_string())]
+                .into_iter()
+                .collect();
+            let _ = remove_with_promotion(
                 data_dir,
-                &mut m,
-                dest,
+                game,
+                m.clone(),
+                &excluded,
+                &mut m.backups,
+                &[dest.to_string()],
                 &root,
                 prefix.as_deref(),
-                &tracked,
             )?;
+            write_manifest(data_dir, &m)?;
         }
     }
     if !skip_prewire {

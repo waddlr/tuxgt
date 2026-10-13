@@ -22,9 +22,9 @@ pub fn other_claims(data_dir: &Path, game_id: &str, instance: &str) -> Result<BT
     Ok(out)
 }
 
-/// One contested dest: every enabled manifest claiming `(adapter, dest)`,
-/// in load order (winner last). Preload and install roots never collide,
-/// so cross-adapter same strings are never grouped.
+/// One contested dest: every enabled manifest claiming one root and `dest`,
+/// in load order (winner last). Copy and Links share the game-dir root, so
+/// they group together; preload and install roots never collide.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LoadConflict {
     pub dest: String,
@@ -42,8 +42,13 @@ pub fn load_conflicts(data_dir: &Path, game_id: &str) -> Result<Vec<LoadConflict
             continue;
         }
         for f in m.files.iter().filter(|f| f.enabled) {
+            let root = if crate::is_preload(&m.adapter) {
+                crate::game::ADAPTER_PRELOAD
+            } else {
+                crate::game::ADAPTER_INSTALL
+            };
             groups
-                .entry((m.adapter.clone(), f.dest.clone()))
+                .entry((root.to_string(), f.dest.clone()))
                 .or_default()
                 .push(m.instance.clone());
         }

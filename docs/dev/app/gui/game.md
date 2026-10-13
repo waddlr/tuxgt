@@ -191,7 +191,7 @@ One muted line when Hook is selected and wrappers are off: gamescope and
 GameMode need Update Launch Options. Manual rows: wrappers still apply
 on owned Play.
 
-Adapter **Preload | Install** (`gui.adapter-choice`): code kept, **not
+Adapter **Preload | Install: Copy | Install: Links** (`gui.adapter-choice`): code kept, **not
 painted**. Switching Install does not copy dests for existing preload
 instances. Default remains preload. Wrappers are independent of file
 placement.

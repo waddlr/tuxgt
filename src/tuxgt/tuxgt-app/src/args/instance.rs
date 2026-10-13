@@ -6,8 +6,9 @@ pub(crate) enum InstanceCmd {
     Install {
         game: String,
         instance: String,
-        /// Launch adapter override: preload (loader ini) or install (game
-        /// dir). Omitted, the game's persisted choice decides.
+        /// Launch adapter override: preload (loader ini), install (copy into
+        /// the game dir), or install-links (symlink into the game dir).
+        /// Omitted, the game's persisted choice decides.
         #[arg(long)]
         adapter: Option<String>,
         /// Force re-fetch of the asset

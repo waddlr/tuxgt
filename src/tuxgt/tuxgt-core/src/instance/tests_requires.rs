@@ -213,11 +213,13 @@ fn adapter_gate_follows_plans() {
     let only_preload = parse_recipe(&sample_recipe("fork", "\"preload\""), false).unwrap();
     assert!(only_preload.allows_adapter("preload"));
     assert!(!only_preload.allows_adapter("install"));
+    assert!(!only_preload.allows_adapter("install-links"));
     assert!(!only_preload.allows_adapter("proton_env"));
     let officials = official_mods(&official_mods_dir(&temp_config())).unwrap().0;
     let opti = officials.iter().find(|i| i.id == "optiscaler").unwrap();
     assert!(opti.allows_adapter("preload"));
     assert!(opti.allows_adapter("install"));
+    assert!(opti.allows_adapter("install-links"));
 }
 
 #[test]

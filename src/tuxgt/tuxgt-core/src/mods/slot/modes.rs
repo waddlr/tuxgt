@@ -18,6 +18,8 @@ struct ModeFile {
     preload: String,
     #[serde(default)]
     install: String,
+    #[serde(default)]
+    install_links: String,
 }
 
 fn safe_instance(instance: &str) -> String {
@@ -67,6 +69,9 @@ fn set_key(modes: &mut ModeFile, adapter: &str, token: &str) -> Result<()> {
     if crate::is_preload(adapter) {
         modes.preload = token;
         Ok(())
+    } else if crate::is_links(adapter) {
+        modes.install_links = token;
+        Ok(())
     } else if crate::is_install(adapter) {
         modes.install = token;
         Ok(())
@@ -87,12 +92,26 @@ pub fn remembered_slot(
     let modes = read_modes(data_dir, game, instance).ok()?;
     let token = if crate::is_preload(adapter) {
         modes.preload
+    } else if crate::is_links(adapter) {
+        modes.install_links
     } else if crate::is_install(adapter) {
         modes.install
     } else {
         return None;
     };
     (!token.is_empty()).then_some(token)
+}
+
+/// Seed an empty Links token from the Copy token before the first Copy↔Links
+/// transition. Dest names are identical across the two materializations, so
+/// the saved Copy destination is the correct Links starting point.
+pub(crate) fn seed_install_links_token(data_dir: &Path, game: &str, instance: &str) -> Result<()> {
+    let mut modes = read_modes(data_dir, game, instance)?;
+    if modes.install_links.is_empty() && !modes.install.is_empty() {
+        modes.install_links.clone_from(&modes.install);
+        write_modes(data_dir, game, instance, &modes)?;
+    }
+    Ok(())
 }
 
 /// Record the token the instance is actually on.
@@ -147,6 +166,7 @@ pub(crate) fn forget_instance(data_dir: &Path, game: &str, instance: &str) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::game::{ADAPTER_INSTALL, ADAPTER_INSTALL_LINKS, ADAPTER_PRELOAD};
 
     #[test]
     fn tokens_keep_the_closed_set() {
@@ -155,5 +175,39 @@ mod tests {
         assert!(canonical_token("ReShade64.dll").is_err());
         assert_eq!(token_for_dest("ReShade64.dll"), "<self>");
         assert_eq!(token_for_dest("d3d11.dll"), "d3d11");
+    }
+
+    #[test]
+    fn links_slot_memory_starts_empty_then_seeds_from_install() {
+        let dir = std::env::temp_dir().join(format!(
+            "tuxgt-slot-links-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let game = "manual:standalone:links";
+        remember_live(&dir, game, "reshade", ADAPTER_PRELOAD, "<self>").unwrap();
+        remember_live(&dir, game, "reshade", ADAPTER_INSTALL, "dxgi").unwrap();
+        assert_eq!(
+            remembered_slot(&dir, game, "reshade", ADAPTER_INSTALL_LINKS),
+            None
+        );
+        seed_install_links_token(&dir, game, "reshade").unwrap();
+        assert_eq!(
+            remembered_slot(&dir, game, "reshade", ADAPTER_INSTALL_LINKS),
+            Some("dxgi".to_string())
+        );
+        remember_live(&dir, game, "reshade", ADAPTER_INSTALL_LINKS, "d3d11").unwrap();
+        assert_eq!(
+            remembered_slot(&dir, game, "reshade", ADAPTER_INSTALL),
+            Some("dxgi".to_string())
+        );
+        assert_eq!(
+            remembered_slot(&dir, game, "reshade", ADAPTER_INSTALL_LINKS),
+            Some("d3d11".to_string())
+        );
     }
 }

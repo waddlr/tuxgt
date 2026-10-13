@@ -23,7 +23,7 @@ use crate::game::{game_adapter, is_install, set_game_adapter, validate_adapter, 
 use crate::install::{backups_dir, resolve_target};
 use crate::{
     apply_copies, game_root, plan_copies, prewire::managed_ini, prewire_game, remove_copies,
-    tracked_dests, write_manifest, CopyOp, Error, FileManifest, Result,
+    write_manifest, CopyOp, Error, FileManifest, InstallMaterial, Result,
 };
 
 /// File bytes, or `None` when the path did not exist.
@@ -103,12 +103,21 @@ fn armed(_point: FailPoint) -> bool {
     false
 }
 
+/// Game-dir dest state before conversion: absent, regular-file bytes, or a
+/// symlink target. Links must restore as links, not as copied bytes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum DestState {
+    Absent,
+    File(Vec<u8>),
+    Link(PathBuf),
+}
+
 /// Everything the conversion can move, recorded before it moves: the
 /// game-dir/prefix dests, the backup files, the manifests, the prewire ini,
 /// and the stored choice.
 struct Snapshot {
-    /// Absolute dest path → pre-conversion bytes (`None` = absent).
-    dests: BTreeMap<PathBuf, Option<Vec<u8>>>,
+    /// Absolute dest path → pre-conversion state.
+    dests: BTreeMap<PathBuf, DestState>,
     /// Backups-dir relative path → pre-conversion bytes.
     backups: BTreeMap<PathBuf, Vec<u8>>,
     /// Manifest file → exact pre-conversion bytes (`None` = absent).
@@ -118,6 +127,15 @@ struct Snapshot {
     /// the failure path.
     ini_path: PathBuf,
     adapter: String,
+}
+
+fn read_dest_state(path: &Path) -> Result<DestState> {
+    match fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => Ok(DestState::Link(fs::read_link(path)?)),
+        Ok(_) => Ok(DestState::File(fs::read(path)?)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(DestState::Absent),
+        Err(e) => Err(e.into()),
+    }
 }
 
 impl Snapshot {
@@ -135,7 +153,7 @@ impl Snapshot {
         for f in manifest.files.iter() {
             let target = resolve_target(root, prefix, &f.dest)?;
             if !self.dests.contains_key(&target) {
-                self.dests.insert(target.clone(), read_optional(&target)?);
+                self.dests.insert(target.clone(), read_dest_state(&target)?);
             }
         }
         let mpath = crate::download::manifest_path(data_dir, game, &manifest.instance);
@@ -186,8 +204,8 @@ impl Snapshot {
                 }
             }
         }
-        for (path, bytes) in &self.dests {
-            if let Err(e) = self.restore_bytes(bytes.as_deref(), path) {
+        for (path, state) in &self.dests {
+            if let Err(e) = Self::restore_dest(path, state) {
                 problems.push(format!("dest restore {}: {e}", path.display()));
             }
         }
@@ -197,6 +215,37 @@ impl Snapshot {
             }
         }
         problems
+    }
+
+    /// Restore one game-dir dest to its captured kind. A link is recreated
+    /// as a link; `atomic_write` already replaces a link entry safely for
+    /// file bytes, and plain removal replaces a file or link for absence.
+    fn restore_dest(path: &Path, state: &DestState) -> Result<()> {
+        match state {
+            DestState::Absent => match fs::remove_file(path) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(e.into()),
+            },
+            DestState::File(bytes) => crate::fs::atomic_write(path, bytes),
+            DestState::Link(target) => {
+                match fs::symlink_metadata(path) {
+                    Ok(meta) if meta.file_type().is_symlink() || meta.file_type().is_file() => {
+                        fs::remove_file(path)?;
+                    }
+                    Ok(_) => {
+                        return Err(Error::NotAFile(path.display().to_string()));
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.into()),
+                }
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                std::os::unix::fs::symlink(target, path)?;
+                Ok(())
+            }
+        }
     }
 
     /// Write `bytes` back, or delete the file when it did not exist before.
@@ -242,7 +291,6 @@ struct ConvertPlan {
     plans: BTreeMap<String, Vec<CopyOp>>,
     root: PathBuf,
     prefix: Option<PathBuf>,
-    tracked: BTreeMap<String, String>,
     harvested: Vec<HarvestedMove>,
 }
 
@@ -278,6 +326,7 @@ async fn plan_conversion(
                 if !slots_chosen
                     && super::slot::conversion_needs_prompt(
                         is_install(target),
+                        is_install(&m.adapter),
                         &m.mod_type,
                         inst.slot.as_deref(),
                         &m.files,
@@ -339,7 +388,6 @@ async fn plan_conversion(
             plans: BTreeMap::new(),
             root: PathBuf::new(),
             prefix: None,
-            tracked: BTreeMap::new(),
             harvested: Vec::new(),
         });
     }
@@ -350,13 +398,15 @@ async fn plan_conversion(
         .collect();
     let prefix =
         crate::install::prefix_for(pool, game, all_dests.iter().map(String::as_str)).await?;
-    let tracked = tracked_dests(data_dir, game)?;
+    let claims = crate::install::claim_inventory(data_dir, game)?;
 
-    // Pre-plan every install-side copy, so the consent check and the
-    // not-staged / prefix errors all land before the first byte moves.
+    // Pre-plan every install-side materialization, so the consent check,
+    // not-staged, prefix, and symlink-capability errors all land before the
+    // first byte or link moves.
     let mut plans: BTreeMap<String, Vec<CopyOp>> = BTreeMap::new();
     let mut need: BTreeSet<String> = BTreeSet::new();
     if is_install(target) {
+        let material = InstallMaterial::of(target);
         for m in moving.iter().filter(|m| m.enabled) {
             let ops = plan_copies(
                 data_dir,
@@ -365,7 +415,8 @@ async fn plan_conversion(
                 m.files.iter().filter(|f| f.enabled),
                 &root,
                 prefix.as_deref(),
-                &tracked,
+                material,
+                &claims,
             )?;
             need.extend(
                 ops.iter()
@@ -376,36 +427,55 @@ async fn plan_conversion(
         }
     }
     // Runtime-generated files live next to the running mod: the game dir on
-    // install, `<game>/runtime/` on preload. Every moving manifest shares
-    // the non-target adapter, so the from-root derives from the target, not
-    // the stored choice. Clashes join the same consent set as foreign
-    // overwrites, so one card names every overwrite the retry authorizes.
-    let (from_root, to_root) = if is_install(target) {
-        (crate::stage::runtime_dir(data_dir, game), root.clone())
+    // either install kind, `<game>/runtime/` on preload. Each manifest's
+    // from-root derives from its own adapter, so mixed moving manifests and
+    // Copy↔Links moves plan correctly. Clashes join the same consent set as
+    // foreign overwrites, so one card names every overwrite the retry
+    // authorizes.
+    let runtime = crate::stage::runtime_dir(data_dir, game);
+    let to_root = if is_install(target) {
+        root.clone()
     } else {
-        (root.clone(), crate::stage::runtime_dir(data_dir, game))
+        runtime.clone()
     };
-    let (mut harvested, clashes) = plan_harvested_moves(&from_root, &to_root, &moving)?;
-    need.extend(clashes.iter().cloned());
+    let mut harvested = Vec::new();
+    for from_root in [runtime, root.clone()] {
+        let group = moving
+            .iter()
+            .filter(|m| {
+                let source = if is_install(&m.adapter) {
+                    root.clone()
+                } else {
+                    crate::stage::runtime_dir(data_dir, game)
+                };
+                source == from_root
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if group.is_empty() {
+            continue;
+        }
+        let (mut moves, clashes) = plan_harvested_moves(&from_root, &to_root, &group)?;
+        need.extend(clashes.iter().cloned());
+        moves.extend(clashes.into_iter().map(|rel| HarvestedMove {
+            src: from_root.join(&rel),
+            dst: to_root.join(&rel),
+            identical: false,
+        }));
+        harvested.extend(moves);
+    }
     if !need.is_empty() && !yes {
         return Err(Error::NeedConfirm(format!(
             "adapter-convert: {}",
             need.into_iter().collect::<Vec<_>>().join(", ")
         )));
     }
-    // Consented clashes become from-wins moves: the live side overwrites.
-    harvested.extend(clashes.into_iter().map(|rel| HarvestedMove {
-        src: from_root.join(&rel),
-        dst: to_root.join(&rel),
-        identical: false,
-    }));
     Ok(ConvertPlan {
         from,
         moving,
         plans,
         root,
         prefix,
-        tracked,
         harvested,
     })
 }
@@ -455,7 +525,6 @@ pub async fn convert_game_adapter(
         plans,
         root,
         prefix,
-        tracked,
         harvested,
     } = plan_conversion(pool, data_dir, config_dir, game, &target, yes, slots_chosen).await?;
 
@@ -487,23 +556,23 @@ pub async fn convert_game_adapter(
     for mv in &harvested {
         for path in [mv.src.clone(), mv.dst.clone()] {
             if !snap.dests.contains_key(&path) {
-                snap.dests.insert(path.clone(), read_optional(&path)?);
+                snap.dests.insert(path.clone(), read_dest_state(&path)?);
             }
         }
     }
     snap.read_backups(data_dir, game)?;
     snap.ini = read_optional(&snap.ini_path.clone())?;
 
+    let mut moving = moving;
     if let Err(e) = apply_conversion(
         pool,
         data_dir,
         game,
         &target,
-        &moving,
+        &mut moving,
         &plans,
         &root,
         prefix.as_deref(),
-        &tracked,
         &harvested,
     )
     .await
@@ -512,6 +581,13 @@ pub async fn convert_game_adapter(
             tracing::error!(game, problem = %p, "adapter conversion rollback incomplete");
         }
         return Err(e);
+    }
+    if is_install(&from) && is_install(&target) && from != target {
+        // First Copy↔Links transition: dest names are identical, so seed
+        // the Links token from the Copy token instead of re-prompting.
+        for m in &moving {
+            super::slot::seed_install_links_token(data_dir, game, &m.instance)?;
+        }
     }
     tracing::info!(
         game,
@@ -528,6 +604,40 @@ pub async fn convert_game_adapter(
     })
 }
 
+/// Consolidate foreign-original backup records before a conversion off the
+/// game-dir root: for each live dest, the last enabled claimant (the
+/// physical winner) inherits the earliest load-order record. The ordinary
+/// per-manifest removal then restores the original instead of dropping the
+/// first claimant's record with its manifest. Manifests are rewritten by
+/// the conversion loop itself, so this only adjusts the in-memory maps.
+fn consolidate_conversion_backups(moving: &mut [FileManifest]) {
+    let mut dests = BTreeSet::new();
+    for m in moving.iter().filter(|m| m.enabled) {
+        for f in m.files.iter().filter(|f| f.enabled) {
+            dests.insert(f.dest.clone());
+        }
+    }
+    for dest in dests {
+        let Some(winner) = moving
+            .iter()
+            .rposition(|m| m.enabled && m.files.iter().any(|f| f.enabled && f.dest == dest))
+        else {
+            continue;
+        };
+        let mut record: Option<String> = None;
+        for m in moving.iter_mut() {
+            if let Some(rel) = m.backups.remove(&dest) {
+                if record.is_none() {
+                    record = Some(rel);
+                }
+            }
+        }
+        if let Some(record) = record {
+            moving[winner].backups.insert(dest, record);
+        }
+    }
+}
+
 /// The mutating half: manifests (each with its copies), then the
 /// harvested-file moves, then prewire, then the stored choice last. Any
 /// error returns to the caller's restore.
@@ -536,37 +646,62 @@ async fn apply_conversion(
     data_dir: &Path,
     game: &str,
     target: &str,
-    moving: &[FileManifest],
+    moving: &mut [FileManifest],
     plans: &BTreeMap<String, Vec<CopyOp>>,
     root: &Path,
     prefix: Option<&Path>,
-    tracked: &BTreeMap<String, String>,
     harvested: &[HarvestedMove],
 ) -> Result<()> {
     let to_install = is_install(target);
-    for m in moving {
-        let mut m = m.clone();
+    if !to_install {
+        consolidate_conversion_backups(moving);
+    }
+    for idx in 0..moving.len() {
+        // Rebuild claims around the manifests already converted: a dest
+        // re-materialized as a link (or back to bytes) is still owned, so
+        // the next manifest must not back it up as foreign.
+        let mut current = crate::game_manifests(data_dir, game)?;
+        for state in moving.iter() {
+            if let Some(slot) = current
+                .iter_mut()
+                .find(|manifest| manifest.instance == state.instance)
+            {
+                *slot = state.clone();
+            }
+        }
+        let claims = crate::install::claim_inventory_from_manifests(data_dir, game, &current)?;
+        let mut m = moving[idx].clone();
         if to_install {
             if m.enabled {
-                let empty = Vec::new();
-                let ops = plans.get(&m.instance).unwrap_or(&empty);
-                apply_copies(data_dir, game, &mut m, root, prefix, ops, tracked)?;
+                let ops = plans.get(&m.instance).ok_or_else(|| {
+                    Error::Install(format!(
+                        "{game} {}: no pre-planned materialization",
+                        m.instance
+                    ))
+                })?;
+                apply_copies(data_dir, game, &mut m, root, prefix, ops, &claims)?;
             }
         } else {
-            // Preload keeps no game-dir copies: restore what was backed up,
+            // Preload keeps no game-dir claims: restore what was backed up,
             // delete what TuxGT still owns, and drop the backup map so no
             // enabled manifest claims an adapter it does not have.
             remove_copies(
                 data_dir,
                 &mut m.backups,
                 m.files.iter().map(|f| f.dest.as_str()),
+                game,
+                &m.instance,
+                &m.adapter,
+                &m.files,
                 root,
                 prefix,
-                tracked,
+                &claims,
             )?;
         }
         m.adapter = target.to_string();
         write_manifest(data_dir, &m)?;
+        moving[idx] = m.clone();
+        let m = &moving[idx];
         if armed(FailPoint::AfterFirstCopy) {
             return Err(Error::Install(format!(
                 "adapter conversion failed after the first copy ({})",

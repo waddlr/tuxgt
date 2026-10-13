@@ -83,6 +83,8 @@ mod tests_adapter_harvested;
 #[cfg(test)]
 mod tests_file_mode;
 #[cfg(test)]
+mod tests_links;
+#[cfg(test)]
 mod tests_park;
 #[cfg(test)]
 mod tests_park_2;

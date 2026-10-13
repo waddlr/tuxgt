@@ -5,9 +5,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use sqlx::SqlitePool;
 
+use super::claims::ClaimInventory;
+use super::material::{
+    classify_dest, ensure_symlink_supported, foreign_link_bytes, unlink_for_copy, write_link,
+    DestStatus, InstallMaterial,
+};
 use super::*;
-use crate::stage::{check_rel, game_safe, stage_dir};
-use crate::{sha256_file, write_manifest, Error, FileManifest, PlannedFile, Result};
+use crate::stage::{check_rel, stage_dir};
+use crate::{write_manifest, Error, FileManifest, PlannedFile, Result};
 
 /// Game-dir root for the install adapter: `install_dir`, else the exe parent.
 pub async fn game_root(pool: &SqlitePool, game_id: &str) -> Result<PathBuf> {
@@ -31,22 +36,13 @@ pub async fn game_root(pool: &SqlitePool, game_id: &str) -> Result<PathBuf> {
     }
 }
 
-/// Dests currently tracked by any manifest of the game, with planned hashes.
-pub fn tracked_dests(data_dir: &Path, game_id: &str) -> Result<BTreeMap<String, String>> {
-    let mut out = BTreeMap::new();
-    for m in crate::game_manifests(data_dir, game_id)? {
-        for f in &m.files {
-            out.insert(f.dest.clone(), f.sha256.clone());
-        }
-    }
-    Ok(out)
-}
 #[derive(Debug)]
 pub struct CopyOp {
     pub dest: String,
     pub src: PathBuf,
     pub needs_confirm: bool,
     pub is_prefix: bool,
+    pub material: InstallMaterial,
 }
 
 /// Validate one `pfx:` dest's shape and proxy-stem rule: the prefix
@@ -61,17 +57,18 @@ fn check_prefix_dest(dest: &str) -> Result<()> {
     Ok(())
 }
 
-/// True when copying `dest` would overwrite content that is neither missing
-/// nor TuxGT-tracked, on a protected foreign stem: the rule the
-/// install/enable/copy paths confirm. Pure read, so a keep toggle can
-/// settle the confirm before it mutates anything. Prefix dests never need
-/// confirm: forbidden proxy stems are install errors (see
-/// [`validate_prefix_dests`]), every other prefix overwrite just backs up.
+/// True when materializing `dest` would overwrite content that is neither
+/// missing nor claimed by an enabled Install manifest, on a protected
+/// foreign stem: the rule the install/enable/copy paths confirm. Pure read,
+/// so a keep toggle can settle the confirm before it mutates anything.
+/// Prefix dests never need confirm: forbidden proxy stems are install
+/// errors (see [`validate_prefix_dests`]), every other prefix overwrite
+/// just backs up.
 pub fn dest_needs_confirm(
     dest: &str,
     root: &Path,
-    prefix: Option<&Path>,
-    tracked: &BTreeMap<String, String>,
+    _prefix: Option<&Path>,
+    claims: &ClaimInventory,
 ) -> Result<bool> {
     if is_prefix_dest(dest) {
         check_prefix_dest(dest)?;
@@ -79,21 +76,19 @@ pub fn dest_needs_confirm(
     }
     check_rel(dest)?;
     let target = root.join(dest);
-    let _ = prefix;
-    let existing = target.is_file().then(|| sha256_file(&target)).transpose()?;
-    Ok(match existing {
-        Some(hash) if Some(&hash) == tracked.get(dest) => false,
-        Some(_) => foreign_dest(dest),
-        None => false,
+    Ok(match classify_dest(&target, claims.claims_for(dest))? {
+        DestStatus::Owned { .. } | DestStatus::Absent | DestStatus::Other => false,
+        DestStatus::ForeignFile | DestStatus::ForeignLink => foreign_dest(dest),
     })
 }
 
-/// Plan the install-adapter copy for one instance's planned files. Game-dir
-/// dests behave as before; `pfx:` dests resolve under the Wine `drive_c`
-/// (see [`prefix_drive_c`]) and never need confirm (forbidden stems error). Re-install of identical
-/// bytes is still copied (cheap) but never needs confirm and never takes a
-/// backup. Callers pass the dests to sync; the install paths pass kept
-/// dests only.
+/// Plan one instance's game-dir materialization. Copy writes staged bytes;
+/// Links writes an absolute symlink to the staged file. Game-dir dests
+/// behave as before; `pfx:` dests resolve under the Wine `drive_c`
+/// (see [`prefix_drive_c`]) and never need confirm (forbidden stems error).
+/// Re-install of identical bytes is still copied (cheap) but never needs
+/// confirm and never takes a backup. Callers pass the dests to sync; the
+/// install paths pass kept dests only.
 pub fn plan_copies<'a>(
     data_dir: &Path,
     game_id: &str,
@@ -101,10 +96,13 @@ pub fn plan_copies<'a>(
     files: impl Iterator<Item = &'a PlannedFile>,
     root: &Path,
     prefix: Option<&Path>,
-    tracked: &BTreeMap<String, String>,
+    material: InstallMaterial,
+    claims: &ClaimInventory,
 ) -> Result<Vec<CopyOp>> {
     let stage = stage_dir(data_dir, game_id, instance);
     let mut ops = Vec::new();
+    let mut needs_game_probe = false;
+    let mut needs_prefix_probe = false;
     for f in files {
         let is_prefix = is_prefix_dest(&f.dest);
         if is_prefix {
@@ -125,20 +123,38 @@ pub fn plan_copies<'a>(
                 f.dest
             )));
         }
-        let needs_confirm = dest_needs_confirm(&f.dest, root, prefix, tracked)?;
+        let needs_confirm = dest_needs_confirm(&f.dest, root, prefix, claims)?;
+        if material.is_links() {
+            if is_prefix {
+                needs_prefix_probe = true;
+            } else {
+                needs_game_probe = true;
+            }
+        }
         ops.push(CopyOp {
             dest: f.dest.clone(),
             src,
             needs_confirm,
             is_prefix,
+            material,
         });
+    }
+    if needs_game_probe {
+        ensure_symlink_supported(root, "game directory")?;
+    }
+    if needs_prefix_probe {
+        let drive = prefix_drive_c(prefix.ok_or_else(|| {
+            Error::Install("pfx: dest needs a Proton/Wine prefix (native game)".to_string())
+        })?);
+        ensure_symlink_supported(&drive, "prefix destination root")?;
     }
     Ok(ops)
 }
 
-/// Apply planned copies: back up pre-existing untracked content
-/// (first backup wins), then copy. Updates `manifest.backups` on disk.
-/// `pfx:` ops land under the Wine `drive_c` with identical backup semantics.
+/// Apply planned game-dir operations: back up pre-existing unclaimed content
+/// (first backup wins), then copy staged bytes or link the staged file.
+/// Updates `manifest.backups` on disk. `pfx:` ops land under the Wine
+/// `drive_c` with identical backup semantics.
 pub fn apply_copies(
     data_dir: &Path,
     game_id: &str,
@@ -146,7 +162,7 @@ pub fn apply_copies(
     root: &Path,
     prefix: Option<&Path>,
     ops: &[CopyOp],
-    tracked: &BTreeMap<String, String>,
+    claims: &ClaimInventory,
 ) -> Result<()> {
     let bdir = backups_dir(data_dir, game_id);
     let ts = SystemTime::now()
@@ -155,24 +171,41 @@ pub fn apply_copies(
         .unwrap_or(0);
     for op in ops {
         let target = resolve_target(root, prefix, &op.dest)?;
-        if target.is_file() {
-            let hash = sha256_file(&target)?;
-            if Some(&hash) != tracked.get(&op.dest) && !manifest.backups.contains_key(&op.dest) {
-                fs::create_dir_all(&bdir)?;
-                let rel = backup_rel(&op.dest, ts, &hash[..8.min(hash.len())]);
-                fs::copy(&target, bdir.join(&rel))?;
-                let stored = bdir
-                    .join(&rel)
-                    .strip_prefix(data_dir)
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_else(|_| format!("backups/{}/{rel}", game_safe(game_id)));
-                manifest.backups.insert(op.dest.clone(), stored);
+        let status = classify_dest(&target, claims.claims_for(&op.dest))?;
+        let owned = status.is_owned();
+        if !owned && !manifest.backups.contains_key(&op.dest) {
+            match status {
+                DestStatus::ForeignFile => {
+                    let hash = crate::sha256_file(&target)?;
+                    backup_target(
+                        data_dir, game_id, manifest, &bdir, ts, &op.dest, &target, &hash,
+                    )?;
+                }
+                DestStatus::ForeignLink => {
+                    if let Some(bytes) = foreign_link_bytes(&target)? {
+                        let hash = crate::sha256_hex(&bytes);
+                        backup_target_bytes(
+                            data_dir, game_id, manifest, &bdir, ts, &op.dest, &bytes, &hash,
+                        )?;
+                    }
+                }
+                DestStatus::Absent | DestStatus::Owned { .. } | DestStatus::Other => {}
             }
         }
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent)?;
+        if op.material.is_links() {
+            if fs::symlink_metadata(&target).is_ok_and(|meta| meta.file_type().is_symlink())
+                && fs::read_link(&target).is_ok_and(|actual| actual == op.src)
+            {
+                continue;
+            }
+            write_link(&target, &op.src)?;
+        } else {
+            unlink_for_copy(&target)?;
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(&op.src, &target)?;
         }
-        fs::copy(&op.src, &target)?;
     }
     write_manifest(data_dir, manifest)?;
     Ok(())
@@ -185,16 +218,21 @@ pub struct Removal {
     pub left_foreign: Vec<String>,
 }
 
-/// Remove the given dests from the game dir / prefix: restore backups where
-/// recorded, delete files that still match tracked content, and leave foreign
-/// content alone. Drops those dests' backup entries from `backups`.
+/// Remove `owner`'s dests from the game dir / prefix: restore a recorded
+/// backup, or delete content that still belongs to `owner`. Content owned by
+/// another claimant, foreign content, and missing dests are left alone, and
+/// their backup records are preserved for the surviving claim.
 pub fn remove_copies<'a>(
     data_dir: &Path,
     backups: &mut BTreeMap<String, String>,
     dests: impl Iterator<Item = &'a str>,
+    game_id: &str,
+    owner_instance: &str,
+    owner_adapter: &str,
+    owner_files: &[PlannedFile],
     root: &Path,
     prefix: Option<&Path>,
-    tracked: &BTreeMap<String, String>,
+    claims: &ClaimInventory,
 ) -> Result<Removal> {
     let mut out = Removal {
         restored: Vec::new(),
@@ -203,58 +241,57 @@ pub fn remove_copies<'a>(
     };
     for dest in dests {
         let target = resolve_target(root, prefix, dest)?;
-        let recorded = backups.remove(dest);
-        if !target.is_file() {
-            continue;
-        }
-        let hash = sha256_file(&target)?;
-        if Some(&hash) != tracked.get(dest) {
-            out.left_foreign.push(dest.to_string());
-            continue;
-        }
-        if let Some(rel) = recorded {
-            let backup = data_dir.join(rel);
-            if backup.is_file() {
-                fs::copy(&backup, &target)?;
-                let _ = fs::remove_file(&backup);
-                out.restored.push(dest.to_string());
-            } else {
-                let _ = fs::remove_file(&target);
-                out.deleted.push(dest.to_string());
+        match classify_dest(&target, claims.claims_for(dest))? {
+            DestStatus::ForeignFile | DestStatus::ForeignLink => {
+                out.left_foreign.push(dest.to_string());
             }
-        } else {
-            let _ = fs::remove_file(&target);
-            out.deleted.push(dest.to_string());
+            DestStatus::Owned { instances, .. }
+                if instances.iter().any(|instance| instance == owner_instance) =>
+            {
+                remove_owned_dest(
+                    data_dir,
+                    game_id,
+                    owner_instance,
+                    owner_adapter,
+                    owner_files,
+                    dest,
+                    backups,
+                    root,
+                    prefix,
+                    &mut out,
+                )?;
+            }
+            DestStatus::Owned { .. } | DestStatus::Absent | DestStatus::Other => {}
         }
     }
     Ok(out)
 }
 
-/// Dests whose installed content is neither missing nor TuxGT-tracked:
-/// uninstall leaves these alone and the confirm names them. `pfx:` dests
-/// resolve under the Wine `drive_c` (see [`prefix_drive_c`]); a `pfx:` dest
-/// with no prefix is an install error.
+/// Dests whose installed content is neither missing nor claimed by an
+/// enabled Install manifest: uninstall leaves these alone and the confirm
+/// names them. `pfx:` dests resolve under the Wine `drive_c`
+/// (see [`prefix_drive_c`]); a `pfx:` dest with no prefix is an install
+/// error.
 pub fn foreign_occupied<'a>(
     dests: impl Iterator<Item = &'a str>,
     root: &Path,
     prefix: Option<&Path>,
-    tracked: &BTreeMap<String, String>,
+    claims: &ClaimInventory,
 ) -> Result<Vec<String>> {
     let mut out = Vec::new();
     for dest in dests {
         let target = resolve_target(root, prefix, dest)?;
-        if !target.is_file() {
-            continue;
-        }
-        let hash = sha256_file(&target)?;
-        if Some(&hash) != tracked.get(dest) {
+        if matches!(
+            classify_dest(&target, claims.claims_for(dest))?,
+            DestStatus::ForeignFile | DestStatus::ForeignLink
+        ) {
             out.push(dest.to_string());
         }
     }
     Ok(out)
 }
 
-/// Plan one dest's install-adapter copy: the per-dest keep path (E64).
+/// Plan one dest's game-dir materialization: the per-dest keep path (E64).
 /// `pfx:` dests resolve under `prefix` (install error when missing).
 pub fn plan_dest_copy(
     data_dir: &Path,
@@ -263,8 +300,9 @@ pub fn plan_dest_copy(
     dest: &str,
     root: &Path,
     prefix: Option<&Path>,
-    tracked: &BTreeMap<String, String>,
+    claims: &ClaimInventory,
 ) -> Result<Vec<CopyOp>> {
+    let material = InstallMaterial::of(&manifest.adapter);
     let files = manifest.files.iter().filter(|f| f.dest == dest);
     plan_copies(
         data_dir,
@@ -273,18 +311,20 @@ pub fn plan_dest_copy(
         files,
         root,
         prefix,
-        tracked,
+        material,
+        claims,
     )
 }
 
-/// Remove one dest's install-adapter copy and persist the manifest's backup map.
+/// Remove one dest's game-dir materialization and persist the manifest's backup map.
 pub fn remove_dest_copy(
     data_dir: &Path,
+    game: &str,
     manifest: &mut FileManifest,
     dest: &str,
     root: &Path,
     prefix: Option<&Path>,
-    tracked: &BTreeMap<String, String>,
+    claims: &ClaimInventory,
 ) -> Result<Removal> {
     let dests = manifest
         .files
@@ -295,9 +335,13 @@ pub fn remove_dest_copy(
         data_dir,
         &mut manifest.backups,
         dests,
+        game,
+        &manifest.instance,
+        &manifest.adapter,
+        &manifest.files,
         root,
         prefix,
-        tracked,
+        claims,
     )?;
     write_manifest(data_dir, manifest)?;
     Ok(out)

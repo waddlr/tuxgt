@@ -349,7 +349,9 @@ impl Shell {
             if install_blocked {
                 btn = btn.tooltip(self.strings.get("gui-adapter-vulkan-only-preload"));
             } else if selected {
-                let help = if tuxgt_core::is_install(adapter) {
+                let help = if tuxgt_core::is_links(adapter) {
+                    self.strings.get("gui-adapter-help-links")
+                } else if tuxgt_core::is_install(adapter) {
                     self.strings.get("gui-adapter-help-install")
                 } else {
                     self.strings.get("gui-adapter-help-preload")
@@ -369,6 +371,7 @@ impl Shell {
             .child(widgets::blabel(self.strings.get("gui-adapter-label"), cx))
             .child(mk(tuxgt_core::ADAPTER_PRELOAD, "adapter-preload"))
             .child(mk(tuxgt_core::ADAPTER_INSTALL, "adapter-install"))
+            .child(mk(tuxgt_core::ADAPTER_INSTALL_LINKS, "adapter-links"))
     }
 
     /// R37: pick the game's Install adapter. Installs themselves run the

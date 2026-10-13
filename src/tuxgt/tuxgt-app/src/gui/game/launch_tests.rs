@@ -38,6 +38,28 @@ fn install_parks_consent_while_a_channel_is_armed() {
 }
 
 #[test]
+fn links_parks_consent_exactly_like_copy() {
+    // Install: Links shares the game-dir root, so the armed-channel and
+    // running-client refusals must match Install: Copy.
+    assert_eq!(
+        adapter_precheck("install-links", LaunchMode::Hook, false),
+        AdapterRefusal::ArmedChannel
+    );
+    assert_eq!(
+        adapter_precheck("install-links", LaunchMode::Apply, false),
+        AdapterRefusal::ArmedChannel
+    );
+    assert_eq!(
+        adapter_precheck("install-links", LaunchMode::Vanilla, false),
+        AdapterRefusal::Ok
+    );
+    assert_eq!(
+        adapter_precheck("install-links", LaunchMode::Vanilla, true),
+        AdapterRefusal::RunningClient
+    );
+}
+
+#[test]
 fn preload_is_never_refused_by_the_channel() {
     // Preload is what the hook injects, so an armed channel is consistent
     // with it: the choice still persists under Hook or Apply.

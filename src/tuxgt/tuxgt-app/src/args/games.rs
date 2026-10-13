@@ -62,10 +62,10 @@ pub(crate) enum GamesCmd {
     },
     /// Force a game visible in the library list
     Unhide { id: String },
-    /// Print or convert the persisted Install adapter (`preload` or `install`)
+    /// Print or convert the persisted adapter (`preload`, `install`, or `install-links`)
     Adapter {
         id: String,
-        /// `preload` or `install`; omit to print the stored choice
+        /// `preload`, `install`, or `install-links`; omit to print the stored choice
         adapter: Option<String>,
         /// Confirm foreign game-dir overwrites without a prompt
         #[arg(long)]

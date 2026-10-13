@@ -1,6 +1,5 @@
 use super::*;
 use crate::{Error, FileManifest};
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -70,7 +69,8 @@ fn backup_first_wins_and_identical_skips() {
     // Foreign original present.
     fs::write(root.join("ReShade64.dll"), b"orig").unwrap();
     let mut m = test_manifest(game, "reshade", "ReShade64.dll", &h1);
-    let tracked = BTreeMap::new();
+    crate::write_manifest(&data, &m).unwrap();
+    let claims = claim_inventory(&data, game).unwrap();
     let ops = plan_copies(
         &data,
         game,
@@ -78,11 +78,12 @@ fn backup_first_wins_and_identical_skips() {
         m.files.iter(),
         &root,
         None,
-        &tracked,
+        InstallMaterial::Copy,
+        &claims,
     )
     .unwrap();
     assert!(!ops[0].needs_confirm); // ReShade64 is not a foreign stem
-    apply_copies(&data, game, &mut m, &root, None, &ops, &tracked).unwrap();
+    apply_copies(&data, game, &mut m, &root, None, &ops, &claims).unwrap();
     assert_eq!(fs::read(root.join("ReShade64.dll")).unwrap(), b"v1");
     assert_eq!(m.backups.len(), 1);
     let first_backup = m.backups["ReShade64.dll"].clone();
@@ -91,8 +92,8 @@ fn backup_first_wins_and_identical_skips() {
     fs::write(stage.join("ReShade64.dll"), b"v2").unwrap();
     let h2 = sha256_file(&stage.join("ReShade64.dll")).unwrap();
     m.files[0].sha256 = h2.clone();
-    let mut tracked2 = BTreeMap::new();
-    tracked2.insert("ReShade64.dll".into(), h1.clone());
+    crate::write_manifest(&data, &m).unwrap();
+    let claims = claim_inventory(&data, game).unwrap();
     let ops = plan_copies(
         &data,
         game,
@@ -100,15 +101,16 @@ fn backup_first_wins_and_identical_skips() {
         m.files.iter(),
         &root,
         None,
-        &tracked2,
+        InstallMaterial::Copy,
+        &claims,
     )
     .unwrap();
-    apply_copies(&data, game, &mut m, &root, None, &ops, &tracked2).unwrap();
+    apply_copies(&data, game, &mut m, &root, None, &ops, &claims).unwrap();
     assert_eq!(m.backups["ReShade64.dll"], first_backup);
     assert_eq!(fs::read(data.join(&first_backup)).unwrap(), b"orig");
     // Re-install of identical bytes: no new backup, same entry.
-    let mut tracked3 = BTreeMap::new();
-    tracked3.insert("ReShade64.dll".into(), h2.clone());
+    crate::write_manifest(&data, &m).unwrap();
+    let claims = claim_inventory(&data, game).unwrap();
     let ops = plan_copies(
         &data,
         game,
@@ -116,11 +118,12 @@ fn backup_first_wins_and_identical_skips() {
         m.files.iter(),
         &root,
         None,
-        &tracked3,
+        InstallMaterial::Copy,
+        &claims,
     )
     .unwrap();
     assert!(!ops[0].needs_confirm);
-    apply_copies(&data, game, &mut m, &root, None, &ops, &tracked3).unwrap();
+    apply_copies(&data, game, &mut m, &root, None, &ops, &claims).unwrap();
     assert_eq!(m.backups["ReShade64.dll"], first_backup);
     let _ = fs::remove_dir_all(&data);
 }
@@ -166,7 +169,8 @@ fn remove_restores_deletes_and_leaves_foreign() {
     };
     // dxgi: foreign original backed up; other: fresh install, no backup.
     fs::write(root.join("dxgi.dll"), b"foreign-orig").unwrap();
-    let tracked = BTreeMap::new();
+    crate::write_manifest(&data, &m).unwrap();
+    let claims = claim_inventory(&data, game).unwrap();
     let ops = plan_copies(
         &data,
         game,
@@ -174,7 +178,8 @@ fn remove_restores_deletes_and_leaves_foreign() {
         m.files.iter(),
         &root,
         None,
-        &tracked,
+        InstallMaterial::Copy,
+        &claims,
     )
     .unwrap();
     assert!(
@@ -183,7 +188,7 @@ fn remove_restores_deletes_and_leaves_foreign() {
             .unwrap()
             .needs_confirm
     );
-    apply_copies(&data, game, &mut m, &root, None, &ops, &tracked).unwrap();
+    apply_copies(&data, game, &mut m, &root, None, &ops, &claims).unwrap();
     // A planned dest missing from staging fails the plan, not the disk.
     let mut files = std::mem::take(&mut m.files).into_vec();
     files.push(crate::download::PlannedFile {
@@ -201,7 +206,8 @@ fn remove_restores_deletes_and_leaves_foreign() {
         m.files.iter(),
         &root,
         None,
-        &tracked
+        InstallMaterial::Copy,
+        &claims
     )
     .is_err());
     m.files = std::mem::take(&mut m.files)
@@ -210,18 +216,21 @@ fn remove_restores_deletes_and_leaves_foreign() {
         .filter(|f| f.dest != "gone.dll")
         .collect::<Vec<_>>()
         .into_boxed_slice();
-    let mut tracked = BTreeMap::new();
-    tracked.insert("dxgi.dll".into(), h_ours.clone());
-    tracked.insert("other.dll".into(), h_other.clone());
+    crate::write_manifest(&data, &m).unwrap();
+    let claims = claim_inventory(&data, game).unwrap();
     // User overwrites other.dll after install: foreign now.
     fs::write(root.join("other.dll"), b"user-edit").unwrap();
     let out = remove_copies(
         &data,
         &mut m.backups,
         m.files.iter().map(|f| f.dest.as_str()),
+        game,
+        &m.instance,
+        &m.adapter,
+        &m.files,
         &root,
         None,
-        &tracked,
+        &claims,
     )
     .unwrap();
     assert_eq!(out.restored, vec!["dxgi.dll".to_string()]);
@@ -238,7 +247,7 @@ fn plan_rejects_traversal() {
     let game = "manual:standalone:eeee0003";
     let (data, stage, root) = setup(game);
     fs::write(stage.join("x.dll"), b"x").unwrap();
-    let tracked = BTreeMap::new();
+    let claims = ClaimInventory::default();
     for dest in ["../evil.dll", "/abs.dll", "a\\b.dll"] {
         let m = test_manifest(game, "reshade", dest, "h");
         assert!(
@@ -249,7 +258,8 @@ fn plan_rejects_traversal() {
                 m.files.iter(),
                 &root,
                 None,
-                &tracked
+                InstallMaterial::Copy,
+                &claims
             )
             .is_err(),
             "{dest}"
@@ -325,7 +335,8 @@ fn prefix_copy_backup_restore() {
     let h1 = crate::sha256_file(&stage.join(dest)).unwrap();
     fs::write(sys32.join("foo.dll"), b"wine-builtin").unwrap();
     let mut m = test_manifest(game, "reshade", dest, &h1);
-    let tracked = BTreeMap::new();
+    crate::write_manifest(&data, &m).unwrap();
+    let claims = claim_inventory(&data, game).unwrap();
     let ops = plan_copies(
         &data,
         game,
@@ -333,12 +344,13 @@ fn prefix_copy_backup_restore() {
         m.files.iter(),
         &root,
         Some(&prefix),
-        &tracked,
+        InstallMaterial::Copy,
+        &claims,
     )
     .unwrap();
     assert!(ops[0].is_prefix);
     assert!(!ops[0].needs_confirm);
-    apply_copies(&data, game, &mut m, &root, Some(&prefix), &ops, &tracked).unwrap();
+    apply_copies(&data, game, &mut m, &root, Some(&prefix), &ops, &claims).unwrap();
     assert_eq!(fs::read(sys32.join("foo.dll")).unwrap(), b"v1");
     assert_eq!(m.backups.len(), 1);
     assert_eq!(
@@ -346,15 +358,18 @@ fn prefix_copy_backup_restore() {
         b"wine-builtin"
     );
     // Uninstall restores the Wine builtin.
-    let mut tracked2 = BTreeMap::new();
-    tracked2.insert(dest.into(), h1.clone());
+    let claims = claim_inventory(&data, game).unwrap();
     let out = remove_copies(
         &data,
         &mut m.backups,
         [dest].into_iter(),
+        game,
+        &m.instance,
+        &m.adapter,
+        &m.files,
         &root,
         Some(&prefix),
-        &tracked2,
+        &claims,
     )
     .unwrap();
     assert_eq!(out.restored, vec![dest.to_string()]);
@@ -400,7 +415,8 @@ fn prefix_copy_lands_under_steam_pfx_drive_c() {
     let h1 = crate::sha256_file(&stage.join(dest)).unwrap();
     fs::write(sys32.join("foo.dll"), b"wine-builtin").unwrap();
     let mut m = test_manifest(game, "reshade", dest, &h1);
-    let tracked = BTreeMap::new();
+    crate::write_manifest(&data, &m).unwrap();
+    let claims = claim_inventory(&data, game).unwrap();
     let ops = plan_copies(
         &data,
         game,
@@ -408,11 +424,12 @@ fn prefix_copy_lands_under_steam_pfx_drive_c() {
         m.files.iter(),
         &root,
         Some(&compat),
-        &tracked,
+        InstallMaterial::Copy,
+        &claims,
     )
     .unwrap();
     assert!(ops[0].is_prefix);
-    apply_copies(&data, game, &mut m, &root, Some(&compat), &ops, &tracked).unwrap();
+    apply_copies(&data, game, &mut m, &root, Some(&compat), &ops, &claims).unwrap();
     assert_eq!(fs::read(sys32.join("foo.dll")).unwrap(), b"v1");
     assert!(compat.join("drive_c").symlink_metadata().is_err());
     assert_eq!(
@@ -420,15 +437,18 @@ fn prefix_copy_lands_under_steam_pfx_drive_c() {
         b"wine-builtin"
     );
     // Uninstall restores the Wine builtin in the Steam tree.
-    let mut tracked2 = BTreeMap::new();
-    tracked2.insert(dest.into(), h1.clone());
+    let claims = claim_inventory(&data, game).unwrap();
     let out = remove_copies(
         &data,
         &mut m.backups,
         [dest].into_iter(),
+        game,
+        &m.instance,
+        &m.adapter,
+        &m.files,
         &root,
         Some(&compat),
-        &tracked2,
+        &claims,
     )
     .unwrap();
     assert_eq!(out.restored, vec![dest.to_string()]);
@@ -445,7 +465,7 @@ fn prefix_without_prefix_is_install_error() {
     fs::write(stage.join(dest), b"v1").unwrap();
     let h1 = crate::sha256_file(&stage.join(dest)).unwrap();
     let m = test_manifest(game, "reshade", dest, &h1);
-    let tracked = BTreeMap::new();
+    let claims = ClaimInventory::default();
     let err = plan_copies(
         &data,
         game,
@@ -453,7 +473,8 @@ fn prefix_without_prefix_is_install_error() {
         m.files.iter(),
         &root,
         None,
-        &tracked,
+        InstallMaterial::Copy,
+        &claims,
     )
     .unwrap_err();
     assert!(matches!(err, Error::Install(_)), "{err}");

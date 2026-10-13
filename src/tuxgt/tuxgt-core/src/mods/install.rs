@@ -4,10 +4,11 @@ use std::path::{Path, PathBuf};
 use sqlx::SqlitePool;
 
 use super::*;
+use crate::install::claim_inventory;
 use crate::stage::{sync_staging, StageInput};
 use crate::{
     apply_copies, generated_globs_for, other_claims, parse_mod_type, plan_copies, prewire_game,
-    read_manifest, tracked_dests, write_manifest, Error, FileManifest, PlannedFile, Result,
+    read_manifest, write_manifest, Error, FileManifest, InstallMaterial, PlannedFile, Result,
 };
 
 pub async fn install_instance(
@@ -450,7 +451,7 @@ pub async fn install_instance(
                 .map(|f| f.dest.as_str()),
         )
         .await?;
-        let tracked = tracked_dests(data_dir, game)?;
+        let claims = claim_inventory(data_dir, game)?;
         let ops = plan_copies(
             data_dir,
             game,
@@ -458,7 +459,8 @@ pub async fn install_instance(
             manifest.files.iter().filter(|f| f.enabled),
             &root,
             prefix.as_deref(),
-            &tracked,
+            InstallMaterial::of(&manifest.adapter),
+            &claims,
         )?;
         let need: Vec<String> = ops
             .iter()
@@ -471,7 +473,7 @@ pub async fn install_instance(
                 need.join(", ")
             )));
         }
-        tracing::debug!(game, instance = instance_id, "game-dir copy");
+        tracing::debug!(game, instance = instance_id, "game-dir materialization");
         apply_copies(
             data_dir,
             game,
@@ -479,7 +481,7 @@ pub async fn install_instance(
             &root,
             prefix.as_deref(),
             &ops,
-            &tracked,
+            &claims,
         )
         .map_err(|e| {
             tracing::error!(game, instance = instance_id, stage = "copy", error = %e, "install failed");

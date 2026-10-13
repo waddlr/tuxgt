@@ -114,8 +114,15 @@ pub struct Mod {
 }
 impl Mod {
     /// Whether an `--adapter` value is permitted by this recipe's plans.
+    /// Links shares the `install` plan, so an install-capable recipe also
+    /// allows `install-links` without changing any recipe TOML.
     pub fn allows_adapter(&self, adapter: &str) -> bool {
-        self.plans_allowed.iter().any(|p| p.as_str() == adapter)
+        let wanted = if adapter == crate::game::ADAPTER_INSTALL_LINKS {
+            Plan::Install.as_str()
+        } else {
+            adapter
+        };
+        self.plans_allowed.iter().any(|p| p.as_str() == wanted)
     }
 }
 

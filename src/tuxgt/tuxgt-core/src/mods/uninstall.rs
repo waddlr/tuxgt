@@ -1,14 +1,11 @@
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use sqlx::SqlitePool;
 
+use crate::install::remove_with_promotion;
 use crate::stage::remove_staging;
-use crate::{
-    foreign_occupied, prewire_game, read_manifest, remove_copies, tracked_dests, Error,
-    FileManifest, Result,
-};
+use crate::{foreign_occupied, prewire_game, read_manifest, Error, FileManifest, Result};
 
 pub async fn uninstall_instance(
     pool: &SqlitePool,
@@ -29,16 +26,23 @@ pub async fn uninstall_instance(
                 foreign.join(", ")
             )));
         }
-        let dests = m.files.iter().map(|f| f.dest.as_str());
-        let removal = remove_copies(
+        let excluded = m
+            .files
+            .iter()
+            .map(|f| (m.instance.clone(), f.dest.clone()))
+            .collect();
+        let dests = m.files.iter().map(|f| f.dest.clone()).collect::<Vec<_>>();
+        let outcome = remove_with_promotion(
             data_dir,
+            game,
+            m.clone(),
+            &excluded,
             &mut m.backups,
-            dests,
+            &dests,
             &roots.root,
             roots.prefix.as_deref(),
-            &roots.tracked,
         )?;
-        restored = removal.restored.into_iter().collect();
+        restored = outcome.removal.restored.into_iter().collect();
     }
     super::park::drop_disabled(pool, data_dir, game, instance, &restored).await?;
     let keep: std::collections::BTreeSet<String> = crate::game_manifests(data_dir, game)?
@@ -72,12 +76,12 @@ pub async fn uninstall_instance(
 }
 
 /// Resolved install-adapter roots for one game: game dir, Wine
-/// prefix, and tracked dest hashes. Computed once and shared by the
-/// foreign pre-check and the copy removal below.
+/// prefix, and enabled game-dir claims. Computed once and shared by the
+/// foreign pre-check and the claim removal below.
 pub(in crate::mods) struct InstallRoots {
     pub root: PathBuf,
     pub prefix: Option<PathBuf>,
-    pub tracked: BTreeMap<String, String>,
+    pub claims: crate::install::ClaimInventory,
 }
 
 /// Resolve install-adapter roots, or `None` for preload manifests
@@ -95,11 +99,11 @@ pub(in crate::mods) async fn install_roots(
     let root = crate::game_root(pool, game).await?;
     let prefix =
         crate::install::prefix_for(pool, game, m.files.iter().map(|f| f.dest.as_str())).await?;
-    let tracked = tracked_dests(data_dir, game)?;
+    let claims = crate::install::claim_inventory(data_dir, game)?;
     Ok(Some(InstallRoots {
         root,
         prefix,
-        tracked,
+        claims,
     }))
 }
 
@@ -114,7 +118,7 @@ pub(in crate::mods) fn foreign_dests(
         m.files.iter().map(|f| f.dest.as_str()),
         &roots.root,
         roots.prefix.as_deref(),
-        &roots.tracked,
+        &roots.claims,
     )?
     .into_iter()
     .filter(|rel| !super::park::claims_generated(m, rel))

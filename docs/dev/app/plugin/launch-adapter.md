@@ -51,11 +51,11 @@ Mod env: after `env_custom`, merge enabled manifests' `[[env]]` in instance-id o
 
 Extra `PRESSURE_VESSEL_FILESYSTEMS_RW`: append `install_dir` and `prefix` when set (the wrapper script already covers the game dir, depot, and ini dir).
 
-### Install adapter
+### Install adapters
 
-`instance install --adapter install|preload` (flag optional; omitted, the game's persisted `games.adapter` choice decides, default `preload`) records `manifest.adapter`. The install adapter copies staging files to the game dir (`install_dir`, else the exe parent) at install/enable time. Dests with the literal ASCII prefix `pfx:windows/system32/<file>` or `pfx:windows/syswow64/<file>` instead copy into the game's Proton/Wine prefix at the Wine `drive_c` (per-game prefix only, never the Proton tree): `pfx:windows/system32/foo.dll` lands at `<prefix>/drive_c/windows/system32/foo.dll` for WINEPREFIX-shaped prefixes, or `<prefix>/pfx/drive_c/windows/system32/foo.dll` when the stored prefix is a Steam `compatdata/<appid>` dir. Only those two roots; a missing prefix (native game) is an install error. User recipes that put a forbidden proxy stem under `pfx:` (the foreign-stem list below, which already covers `dxgi`/`d3d9`/`d3d10`/`d3d11`/`d3d12`/`opengl32`) are install errors. Prefix dests are install-adapter only, never preload; prewire never `LoadDLL`s them, so they never consume the 8192-byte ini budget.
+`instance install --adapter preload|install|install-links` (flag optional; omitted, the game's persisted `games.adapter` choice decides, default `preload`) records `manifest.adapter`. The two Install adapters share one game-dir root. Copy (`install`) copies staging files to the game dir (`install_dir`, else the exe parent) at install/enable time. Links (`install-links`) instead creates one absolute, per-file symlink from each kept dest to `stage/<instance>/<dest>`; directories are never symlinked. A recipe `install` permission allows either Copy or Links. Before Links mutates anything, each affected game or prefix root is probed by creating and removing a temporary symlink; an incapable root is a pre-mutation error with no silent Copy fallback. A backed-up foreign symlink restores its resolved bytes as a regular file. Dests with the literal ASCII prefix `pfx:windows/system32/<file>` or `pfx:windows/syswow64/<file>` instead copy into the game's Proton/Wine prefix at the Wine `drive_c` (per-game prefix only, never the Proton tree): `pfx:windows/system32/foo.dll` lands at `<prefix>/drive_c/windows/system32/foo.dll` for WINEPREFIX-shaped prefixes, or `<prefix>/pfx/drive_c/windows/system32/foo.dll` when the stored prefix is a Steam `compatdata/<appid>` dir. Only those two roots; a missing prefix (native game) is an install error. User recipes that put a forbidden proxy stem under `pfx:` (the foreign-stem list below, which already covers `dxgi`/`d3d9`/`d3d10`/`d3d11`/`d3d12`/`opengl32`) are install errors. Prefix dests are install-adapter only, never preload; prewire never `LoadDLL`s them, so they never consume the 8192-byte ini budget.
 
-Foreign confirm: a game-dir dest whose stem (lowercased, sans `.dll`) is in `{dxgi, d3d9, d3d10, d3d11, d3d12, opengl32, dxvk, d8, d9, enb, specialk, vkd3d, winmm, version}` and whose existing content is not TuxGT-tracked requires confirm (print the dests, require `y`, or `--yes`; non-TTY without `--yes` is an error). Other game-dir dests overwrite with a backup. Overwritten prefix files get the same backup treatment (Wine builtins included); uninstall restores them. A dest claimed by two enabled install-adapter manifests is a conflict, not an error: last in load order wins, backups keep originals. Reorder re-applies enabled install-adapter copies top-to-bottom in the new order (as `--yes`, backups kept), then prewires. Conflict groups key on (adapter, dest): preload and install roots never collide with each other.
+Foreign confirm: a game-dir dest whose stem (lowercased, sans `.dll`) is in `{dxgi, d3d9, d3d10, d3d11, d3d12, opengl32, dxvk, d8, d9, enb, specialk, vkd3d, winmm, version}` and whose existing content is not TuxGT-tracked requires confirm (print the dests, require `y`, or `--yes`; non-TTY without `--yes` is an error). Other game-dir dests overwrite with a backup. Overwritten prefix files get the same backup treatment (Wine builtins included); uninstall restores them. A dest claimed by two enabled manifests on either Install kind is a conflict, not an error: last in load order wins, backups keep originals. Reorder re-applies enabled game-dir claims top-to-bottom in the new order (as `--yes`, backups kept), then prewires. Conflict groups normalize Copy and Links to one game-dir root; preload and install roots never collide with each other. When a live winner's claim ends through uninstall, disable, kept-dest removal, or a slot rename away from the old dest, the next enabled claimant on either Install kind is promoted in that claimant's own materialization. A next claimant that cannot be materialized (unstaged payload, incapable Links root) degrades to plain removal of the departing claim with a warning log. Removal first verifies that the departing claim is the live file (Copy) or the live link target (Links); a departing loser leaves the winner untouched. While any claimant remains, its foreign-original backup record transfers to the surviving claimant instead of being restored.
 
 Instance slot: `set_instance_slot` rewrites the claiming Load dest. A slot-named sibling wins; otherwise the single named injector (`OptiScaler.dll`, `ReShade64.dll`, or `ReShade32.dll`) wins over companion DLLs; otherwise a lone sibling. Two injectors, or no single claimer, is an error when a slot was chosen (`no single injector DLL`), not a silent stock-name install. `<self>` keeps the source basename (`OptiScaler.dll`, `ReShade64.dll`); a proxy stem (`dxgi`, `d3d9`, `d3d10`, `d3d11`, `d3d12`, `opengl32`, `winmm`, `version`, with or without `.dll`) becomes `<stem>.dll`. A dest another enabled mod already holds is `Error::SlotInUse` (`{instance}: slot {slot} is used by {holder}`) before the same-dest no-op. Disabled mods do not hold a slot. `<self>` that resolves to a proxy-named basename is checked the same way. Install-adapter foreign game-dir dests confirm first. Prints `game<TAB>instance<TAB>slot`. ReShade, OptiScaler, and a custom recipe that names a slot are slot-configurable. NVIDIA Streamline (custom, no `slot`, one dest per DLL in `include`) is not: each DLL stays its own name on preload, Install, and both conversions. Addons, shaders, and textures are not either.
 
@@ -66,7 +66,7 @@ Play sets `WINEDLLOVERRIDES` `<stem>=n,b` entries (`;`-joined, merged with any e
 ### CLI
 
 ```
-tuxgt instance install <game> <mod> [--adapter preload|install] [--slot <self|dxgi|d3d9|d3d10|d3d11|d3d12|opengl32|winmm|version>] [--redownload] [--yes] [--force]
+tuxgt instance install <game> <mod> [--adapter preload|install|install-links] [--slot <self|dxgi|d3d9|d3d10|d3d11|d3d12|opengl32|winmm|version>] [--redownload] [--yes] [--force]
 tuxgt instance uninstall <game> <mod> [--yes]
 tuxgt instance status <game>
 tuxgt instance files <game> <mod>
@@ -79,15 +79,15 @@ tuxgt instance check <game> [<mod>] [--yes] [--slot <self|dxgi|d3d9|d3d10|d3d11|
 tuxgt instance update <game> [<mod>] [--yes] [--slot <self|dxgi|d3d9|d3d10|d3d11|d3d12|opengl32|winmm|version>]
 tuxgt instance resync <game> [<mod>] [--yes]
 tuxgt games adapter <id>
-tuxgt games adapter <id> preload|install [--yes] [--slot <self|dxgi|d3d9|d3d10|d3d11|d3d12|opengl32|winmm|version>]
+tuxgt games adapter <id> preload|install|install-links [--yes] [--slot <self|dxgi|d3d9|d3d10|d3d11|d3d12|opengl32|winmm|version>]
 ```
 
-`--yes` answers the foreign-dest confirm and the store-client stop/restart. `--force` re-copies user-touched staging from the depot. `--slot` names the claiming dest for a slot-configurable Install-adapter install (`<self>` or a proxy stem). Without it that install returns `NeedSlotChoice` before any download; a stem another enabled mod holds returns `SlotInUse`. Preload installs keep the stock basename. `status` prints `mod<TAB>file<TAB>in-sync|user-modified|depot-newer` per staged file and exits 0. `files loaddll|include` writes `[[files]].load`. `check` repairs provenance/cache (GUI baseline), then prints `up-to-date|available|unknown`. `update` checks, then redownloads on confirmation when available. `resync` is Force re-sync (overwrites user-touched staging); `--yes` skips the shared-proxy re-pick. `games adapter` prints or converts the persisted `games.adapter` choice (same `convert_game_adapter` as the GUI). Convert→Install consents first, then unhooks, then auto-Applies; Convert→Preload restores. A running Steam/Heroic prompts to stop, write, and restart (same as the GUI ClientStop card).
+`--yes` answers the foreign-dest confirm and the store-client stop/restart. `--force` re-copies user-touched staging from the depot. `--slot` names the claiming dest for a slot-configurable Install-adapter install (`<self>` or a proxy stem). Without it that install returns `NeedSlotChoice` before any download; a stem another enabled mod holds returns `SlotInUse`. Preload installs keep the stock basename. `status` prints `mod<TAB>file<TAB>in-sync|user-modified|depot-newer` per staged file and exits 0. `files loaddll|include` writes `[[files]].load`. `check` repairs provenance/cache (GUI baseline), then prints `up-to-date|available|unknown`. `update` checks, then redownloads on confirmation when available. `resync` is Force re-sync (overwrites user-touched staging); `--yes` skips the shared-proxy re-pick. `games adapter` prints or converts the persisted `games.adapter` choice (same `convert_game_adapter` as the GUI). Convert→Copy or Convert→Links consents first, then unhooks, then auto-Applies; Convert→Preload restores. A running Steam/Heroic prompts to stop, write, and restart (same as the GUI ClientStop card).
 
 
 ### Persisted choice and conversion
 
-`games.adapter` holds one validated choice per game (`preload` | `install`); the schema
+`games.adapter` holds one validated choice per game (`preload` | `install` | `install-links`); stored `install` is Copy. The schema
 default backfills legacy rows and the scan upsert never writes it. `game_adapter` /
 `set_game_adapter` are the only accessors; `InstallOpts.adapter` is `Option<String>`, so
 `None` (every GUI path) resolves the stored choice at install time and only the CLI flag
@@ -101,13 +101,13 @@ overrides per call.
   `adapter-convert: <dests>`). A disabled instance never vetoes: its manifest
   still follows the choice, and it moves no files;
 - when `slots_chosen` is false and a slot-configurable mod is moving, returns
-  `Error::NeedSlotChoice` (`need-slot: <instances>`) before any rename or copy. Touched
+  `Error::NeedSlotChoice` (`need-slot: <instances>`) before any rename, copy, or link. Touched
   staging on the current claiming dest still refuses first (`StagedModified`). To
-  `install`, every slot-configurable mod is in that list. To `preload`, only one whose
+  Copy or Links, every slot-configurable mod is in that list. Copy↔Links moves no slot names, so it never prompts. To `preload`, only one whose
   claiming dest is already a proxy name, so the GUI can offer a rename back to `<self>`
   (default yes). NVIDIA Streamline, addons, shaders, and textures are never in the list;
-  each of their DLLs keeps its own basename. CLI `games adapter` converts the same way (`--slot` fills every named instance); a running store client confirms stop-write-restart;
-- vulkan games are preload-only: no proxy DLL loads in Vulkan, so `install_instance`, `convert_game_adapter` (and the `validate_adapter_convert` dry-run), and `set_game_adapter` refuse the install adapter for effective API `vulkan` before any write (`extra_apis` never gates; unknown API passes). The GUI Install radio disables with the reason;
+  each of their DLLs keeps its own basename on preload, on either Install kind, and across conversions. CLI `games adapter` converts the same way (`--slot` fills every named instance); a running store client confirms stop-write-restart;
+- vulkan games are preload-only: no proxy DLL loads in Vulkan, so `install_instance`, `convert_game_adapter` (and the `validate_adapter_convert` dry-run), and `set_game_adapter` refuse either Install adapter for effective API `vulkan` before any write (`extra_apis` never gates; unknown API passes). The GUI disables both Install choices with the reason;
 - the GUI records each pick before the conversion snapshot, then replays with
   `slots_chosen` true. That replay does not ask again, including when a later
   `NeedConfirm` retries from the Overwrite card (`slots_chosen` stays true). Preload
@@ -117,7 +117,7 @@ overrides per call.
   stop writes nothing. A disabled mod's pick is manifest-only, so its DLL is not copied
   back. The conversion itself does not rename dests. A pick is outside the conversion
   snapshot: a rolled-back conversion keeps the picked dest and the old adapter;
-- a fresh Install-adapter install of a slot-configurable mod with no prior manifest and
+- a fresh Copy- or Links-adapter install of a slot-configurable mod with no prior manifest and
   no `InstallOpts.slot` returns `NeedSlotChoice` before download. The GUI default is the
   recipe slot when it is in the game's API set, else the API default (`d3d9`/`dxgi`/
   `opengl32`, stock for vulkan; unknown API keeps recipe-or-`dxgi`), and the menu lists
@@ -134,13 +134,13 @@ overrides per call.
   (`adapter-convert: <dests>`), and the live side wins once consented, while identical
   collisions dedupe silently;
 - snapshots game-dir/prefix dests, the backup dir, the manifests, the prewire ini, and the
-  stored choice after any slot pick; applies restages, manifests + copies, harvested moves,
-  regenerates prewire, and writes `games.adapter` **last**;
-- on any failure restores every one of those (harvested moves restore both roots) before
+  stored choice after any slot pick; applies restages, manifests + game-dir materialization, harvested moves,
+  regenerates prewire, and writes `games.adapter` **last**; Copy↔Links re-materializes dests in place and preserves backups;
+- on any failure restores every one of those, including file-versus-link identity (harvested moves restore both roots), before
   returning. A rolled-back game keeps its old adapter and the dest the pick already wrote.
 
 The GUI (`gui/game/launch.rs`) paints the stored value on every game row (manual included),
-refuses Install while Hook/Apply is armed or a store client runs, and re-reads core after
+refuses either Install materialization while Hook/Apply is armed or a store client runs, and re-reads core after
 every result. The two consents stay separate: a direct click authorizes neither, the
 ClientStop card authorizes only the stop, and a foreign game-dir overwrite raises the
 standard Overwrite card (Confirm retries with `yes` and the same `slots_chosen`). Cancel of
