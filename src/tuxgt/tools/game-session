@@ -1,0 +1,366 @@
+#!/bin/sh
+# Private gamescope lane for in-game (e2e.game-proof) verification.
+#
+# One headless gamescope + lane PipeWire + scratch tuxgt prefix and Proton
+# compatdata per lane id. `--backend headless` only: no window, seat, or
+# audio ever reaches the operator desktop; init failure exits non-zero.
+#
+# Usage: src/tuxgt/tools/game-session <command> [options]
+#   start [--id ID] [--class smoke|heavy] [--size WxH] [--fps N] [--seed]
+#         [--proton PATH] [--gpu <pci-id|render-node>] [--binary PATH] [--fresh]
+#   seed  [--id ID] [--fresh]        copy recipes/payloads + launcher assets
+#   env   [--id ID]                  print export lines for the lane env
+#   cli   [--id ID] -- ARGS...       lane binary with the lane prefix
+#   play  [--id ID] [--seconds N] [--name RUN] [--serial] [--drive FILE] GAMEID
+#   shot  [--id ID] [NAME]           one compositor screenshot (PNG)
+#   burst [--id ID] [--seconds N] [--every MS] [--name RUN]
+#   record [--id ID] start|stop [NAME]   PipeWire video to video/<name>.mkv
+#   key   [--id ID] KEYSYM...        keys to the game window (combos: ctrl+c)
+#   type  [--id ID] TEXT...          type text into the game window
+#   click [--id ID] X Y [BUTTON]     mouse click at lane pixels; move X Y
+#   drive [--id ID] FILE             wait/key/type/click/move/shot script
+#   report BUNDLE_DIR                write BUNDLE_DIR/report/index.html
+#   logs  [--id ID] [gamescope|game|proton|launcher|reshade] [-n N]
+#   status | list | stop [--id ID] [--purge]
+#
+# Play drives the real manual path (`tuxgt launch`) with WINEPREFIX pinned
+# to the lane compatdata so umu + the protonfixes hook correlate the game.
+# See .agents/docs/plans/game-e2e-visual/ (local packet) for the design.
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+state_root=${TUXGT_GG_ROOT:-/tmp/tuxgt-gg}
+live=${TUXGT_LIVE:-$HOME/tuxgt}
+
+die() { printf 'game-session: %s\n' "$*" >&2; exit 1; }
+usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+cmd=${1:-}
+[ -n "$cmd" ] || usage 2
+shift 2>/dev/null || true
+
+id=default
+binary=$root/src/tuxgt/target/debug/tuxgt
+size=640x360
+fps=30
+class=smoke
+proton=
+gpu=
+seed=0
+fresh=0
+purge=0
+serial=0
+seconds=12
+every=200
+name=
+drive=
+logs_which=gamescope
+logs_n=40
+args=
+
+while [ $# -gt 0 ]; do
+    case $1 in
+        --id) id=${2:?}; shift 2 ;;
+        --id=*) id=${1#--id=}; shift ;;
+        --binary) binary=${2:?}; shift 2 ;;
+        --size) size=${2:?}; shift 2 ;;
+        --fps) fps=${2:?}; shift 2 ;;
+        --class) class=${2:?}; shift 2 ;;
+        --proton) proton=${2:?}; shift 2 ;;
+        --gpu) gpu=${2:?}; shift 2 ;;
+        --seconds) seconds=${2:?}; shift 2 ;;
+        --every) every=${2:?}; shift 2 ;;
+        --name) name=${2:?}; shift 2 ;;
+        --drive) drive=${2:?}; shift 2 ;;
+        --seed) seed=1; shift ;;
+        --fresh) fresh=1; shift ;;
+        --purge) purge=1; shift ;;
+        --serial) serial=1; shift ;;
+        -n) logs_n=${2:?}; shift 2 ;;
+        gamescope|game|proton|launcher|reshade)
+            [ "$cmd" = logs ] && { logs_which=$1; shift; } || { args=$*; break; } ;;
+        --) shift; args=$*; break ;;
+        -h|--help) usage 0 ;;
+        -*) die "unknown option $1" ;;
+        *) args=$*; break ;;
+    esac
+done
+
+case $id in
+    ''|*/*|*..*) die "bad lane id '$id'" ;;
+    *[!A-Za-z0-9_-]*) die "bad lane id '$id' (use A-Za-z0-9_-)" ;;
+esac
+case $size in *[!0-9x]*|x*|*x) die "bad --size '$size' (use WxH)" ;; esac
+W=${size%x*}; H=${size#*x}
+lane=$state_root/$id
+runtime=$lane/runtime
+prefix=$lane/prefix
+compat=$lane/compatdata
+
+case ${cmd:-} in -h|--help|help) usage 0 ;; esac
+
+# Only capture/start commands need the compositor toolchain.
+need_tools() {
+    for tool in "$@"; do
+        command -v "$tool" >/dev/null 2>&1 || die "$tool not installed (game lanes need gamescope, pipewire, gst-plugins, ffmpeg)"
+    done
+    for el in pipewiresrc videoconvert fdsink; do
+        gst-inspect-1.0 "$el" >/dev/null 2>&1 || die "gstreamer element $el missing (record would have no capture path)"
+    done
+}
+need_cmds() {
+    for tool in "$@"; do
+        command -v "$tool" >/dev/null 2>&1 || die "$tool not installed"
+    done
+}
+case $cmd in
+    start) need_tools gamescope gamescopectl pipewire wireplumber wpctl pw-cli pw-dump gst-launch-1.0 gst-inspect-1.0 ffmpeg flock python3 ;;
+    play|shot|burst|record) need_tools gamescopectl pw-dump gst-launch-1.0 gst-inspect-1.0 ffmpeg flock python3 ;;
+    key|type|click|move) need_cmds xdotool ;;
+    drive) need_cmds xdotool gamescopectl ffmpeg ;;
+    report) need_cmds ffmpeg ffprobe ;;
+esac
+
+# Lane-recorded state (start writes; later commands read so flags need not repeat).
+[ -f "$lane/binary" ] && binary=$(cat "$lane/binary")
+[ -f "$lane/size" ] && { size=$(cat "$lane/size"); W=${size%x*}; H=${size#*x}; }
+[ -f "$lane/fps" ] && fps=$(cat "$lane/fps")
+[ -f "$lane/class" ] && class=$(cat "$lane/class")
+[ -f "$lane/proton" ] && [ -z "$proton" ] && proton=$(cat "$lane/proton")
+
+# Lane helpers (pid/lock discipline, lane env, capture stack), the play
+# loop, the input/drive stack, and the proof-report renderer.
+. "$root/src/tuxgt/tools/game-session.d/core.sh"
+. "$root/src/tuxgt/tools/game-session.d/play.sh"
+. "$root/src/tuxgt/tools/game-session.d/input.sh"
+. "$root/src/tuxgt/tools/game-session.d/report.sh"
+
+cmd_seed() {
+    mkdir -p "$lane/logs" "$prefix/bin" "$prefix/lib" "$prefix/share/protonfixes" \
+        "$prefix/mods/official" "$prefix/mods/user" "$prefix/config" "$prefix/downloads"
+    if [ ! -f "$root/build/libtuxgt-launcher.so" ]; then
+        make -C "$root" preload >"$lane/logs-make-preload.log" 2>&1 ||
+            die "make preload failed (see $lane/logs-make-preload.log)"
+    fi
+    cp "$root/build/libtuxgt-launcher.so" "$prefix/lib/"
+    [ -f "$root/build/libtuxgt-launcher32.so" ] && cp "$root/build/libtuxgt-launcher32.so" "$prefix/lib/"
+    cp "$root/src/launcher/tuxgt-launcher" "$prefix/bin/tuxgt-launcher"
+    chmod +x "$prefix/bin/tuxgt-launcher"
+    for f in tuxgt_apply.py tuxgt.py default.py default_wrap.py; do
+        cp "$root/src/protonfixes-hook/$f" "$prefix/share/protonfixes/"
+    done
+    # Recipes from the repo, payloads from the live prefix (copied, never
+    # symlinked; the live library DB is never imported into a lane).
+    for t in "$root"/mods/official/*.toml; do [ -f "$t" ] && cp -aL "$t" "$prefix/mods/official/"; done
+    if [ -d "$live/mods/official" ]; then cp -aL "$live/mods/official/." "$prefix/mods/official/"; fi
+    if [ -d "$live/downloads" ]; then cp -aL "$live/downloads/." "$prefix/downloads/" 2>/dev/null || true; fi
+    [ -f "$HOME/.config/protonfixes/localfixes/default.py" ] ||
+        printf 'game-session: warning: ~/.config/protonfixes/localfixes/default.py missing — the Hook path needs a packaged `tuxgt install` once\n' >&2
+    printf 'seed\t%s (recipes: repo+live overlay, launcher assets: worktree)\n' "$prefix"
+}
+
+cmd_start() {
+    lane_up && die "lane $id already up (pid $(cat "$lane/gamescope.pid")) — stop it first"
+    [ -x "$binary" ] ||
+        die "tuxgt binary not found: $binary (build: cd src/tuxgt && cargo build -p tuxgt)"
+    if [ $fresh -eq 1 ]; then rm -rf "$prefix" "$compat" "$lane/game"; fi
+    mkdir -p "$runtime" "$prefix" "$compat" "$lane/game" "$lane/frames" "$lane/video" "$lane/logs" "$lane/xdg-config" "$lane/xdg-state" "$lane/xdg-data"
+    chmod 700 "$runtime"
+    printf 'pcm.!default { type null }\nctl.!default { type null }\n' >"$lane/asoundrc"
+    [ $seed -eq 1 ] && cmd_seed
+    if [ -z "$proton" ]; then
+        for d in "$HOME"/.steam/root/compatibilitytools.d/GE-Proton*/proton \
+                 "$HOME"/.steam/root/compatibilitytools.d/*/proton; do
+            [ -f "$d" ] && { proton=$d; break; }
+        done
+    fi
+    lock_acquire
+    trap 'start_fail "interrupted during start"' INT TERM
+    echo "$binary" >"$lane/binary"; echo "$size" >"$lane/size"
+    echo "$fps" >"$lane/fps"; echo "$class" >"$lane/class"; echo "$proton" >"$lane/proton"
+    rm -f "$lane/child-env.txt" "$runtime"/gamescope-* "$runtime"/pipewire-0* 2>/dev/null || true
+    base_env="HOME=$HOME PATH=$PATH XDG_RUNTIME_DIR=$runtime PIPEWIRE_RUNTIME_DIR=$runtime XDG_CONFIG_HOME=$lane/xdg-config XDG_STATE_HOME=$lane/xdg-state XDG_DATA_HOME=$lane/xdg-data"
+    # shellcheck disable=SC2086
+    nohup env -i $base_env pipewire >>"$lane/logs/pipewire.log" 2>&1 &
+    echo $! >"$lane/pipewire.pid"
+    i=0; while [ ! -S "$runtime/pipewire-0" ] && [ $i -lt 40 ]; do sleep 0.25; i=$((i + 1)); done
+    [ -S "$runtime/pipewire-0" ] || { tail -10 "$lane/logs/pipewire.log" >&2; start_fail "lane pipewire did not start"; }
+    # shellcheck disable=SC2086
+    nohup env -i $base_env wireplumber >>"$lane/logs/wireplumber.log" 2>&1 &
+    echo $! >"$lane/wireplumber.pid"
+    sleep 1
+    if ! XDG_RUNTIME_DIR=$runtime PIPEWIRE_RUNTIME_DIR=$runtime \
+        pw-cli create-node adapter '{ factory.name=support.null-audio-sink node.name="tuxgt-null" media.class=Audio/Sink object.linger=true audio.position=[ FL FR ] }' \
+        >>"$lane/logs/pipewire.log" 2>&1; then
+        start_fail "could not create lane null audio sink (see $lane/logs/pipewire.log)"
+    fi
+    nid=
+    i=0
+    while [ $i -lt 20 ]; do
+        nid=$(XDG_RUNTIME_DIR=$runtime PIPEWIRE_RUNTIME_DIR=$runtime pw-dump 2>/dev/null | python3 -c '
+import json,sys
+try:
+    data=json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+for o in data:
+    p=o.get("info",{}).get("props",{}) or {}
+    if p.get("node.name")=="tuxgt-null":
+        print(o.get("id")); break
+else:
+    sys.exit(1)') && [ -n "$nid" ] && break
+        sleep 0.25; i=$((i + 1))
+    done
+    [ -n "$nid" ] || start_fail "lane null audio sink did not appear"
+    XDG_RUNTIME_DIR=$runtime PIPEWIRE_RUNTIME_DIR=$runtime wpctl set-default "$nid" \
+        >>"$lane/logs/pipewire.log" 2>&1 ||
+        start_fail "could not set lane null sink as default (wpctl)"
+    cat >"$lane/keeper.sh" <<EOF
+#!/bin/sh
+env | sort > "$lane/child-env.txt"
+exec sleep 2147483647
+EOF
+    chmod +x "$lane/keeper.sh"
+    gpuopt=
+    if [ -n "$gpu" ]; then gpuopt="--prefer-vk-device $(gpu_vk)"; fi
+    # shellcheck disable=SC2086
+    nohup env -i $base_env SDL_AUDIODRIVER=dummy \
+        gamescope --backend headless -W "$W" -H "$H" -w "$W" -h "$H" -r "$fps" \
+        --xwayland-count 1 --force-windows-fullscreen $gpuopt \
+        -- "$lane/keeper.sh" >>"$lane/logs/gamescope.log" 2>&1 &
+    echo $! >"$lane/gamescope.pid"
+    i=0
+    while [ $i -lt 60 ]; do
+        grep -q '^DISPLAY=' "$lane/child-env.txt" 2>/dev/null && break
+        lane_up || break
+        sleep 0.25; i=$((i + 1))
+    done
+    grep -q '^DISPLAY=' "$lane/child-env.txt" 2>/dev/null || {
+        tail -20 "$lane/logs/gamescope.log" >&2
+        start_fail "gamescope headless did not come up (see $lane/logs/gamescope.log); no windowed fallback is attempted"
+    }
+    trap - INT TERM
+    printf 'lane %s up\tclass=%s\tdisplay=%s\tprefix=%s\tcompat=%s\n' \
+        "$id" "$class" "$(child_env DISPLAY)" "$prefix" "$compat"
+}
+
+cmd_shot() {
+    lane_up || die "lane $id is not running"
+    mkdir -p "$lane/frames"
+    n=$(ls "$lane/frames"/*.png 2>/dev/null | wc -l)
+    out=$(printf '%s/frames/%02d-%s.png' "$lane" "$((n + 1))" "${name:-${args:-shot}}")
+    take_shot "$out" || die "screenshot produced no file (gamescopectl is silent on failure; see $lane/logs/gamescope.log)"
+    printf '%s\t%s bytes\n' "$out" "$(wc -c <"$out")"
+}
+
+cmd_burst() {
+    lane_up || die "lane $id is not running"
+    [ -n "$name" ] || name=${args:-burst}
+    dir=$lane/frames/$name
+    [ -e "$dir" ] && die "burst dir exists: $dir"
+    mkdir -p "$dir"
+    : >"$dir/times.txt"
+    step=$(awk -v ms="$every" 'BEGIN{printf "%.3f", ms/1000}')
+    end=$(($(date +%s) + seconds)); n=0
+    while [ "$(date +%s)" -lt "$end" ]; do
+        n=$((n + 1))
+        f=$(printf '%s/%04d.png' "$dir" "$n")
+        date +%s.%N >>"$dir/times.txt"
+        take_shot "$f" || printf 'game-session: burst frame %s missed\n' "$f" >&2
+        sleep "$step"
+    done
+    printf 'burst\t%s\tframes=%s\ttimes=%s/times.txt\n' "$dir" "$n" "$dir"
+}
+
+cmd_env() {
+    export_env play
+    printf 'export XDG_RUNTIME_DIR=%s\n' "$runtime"
+    printf 'export PIPEWIRE_RUNTIME_DIR=%s\n' "$runtime"
+    printf 'export DISPLAY=%s\n' "$(child_env DISPLAY)"
+    printf 'export GAMESCOPE_WAYLAND_DISPLAY=%s\n' "$(child_env GAMESCOPE_WAYLAND_DISPLAY)"
+    printf 'export TUXGT_DATA=%s\n' "$prefix"
+    printf 'export TUXGT_CONFIG=%s\n' "$prefix/config"
+    printf 'export WINEPREFIX=%s\n' "$compat"
+    printf 'export GG_LANE=%s GG_GAME=%s GG_PROTON=%s\n' "$lane" "$lane/game" "$proton"
+}
+
+cmd_cli() {
+    [ -n "$args" ] || die "cli needs arguments: game-session cli -- games list"
+    export_env
+    unset DISPLAY GAMESCOPE_WAYLAND_DISPLAY
+    cd "$root"
+    # shellcheck disable=SC2086
+    exec "$(lane_binary)" $args
+}
+
+cmd_logs() {
+    f=$(log_file "$logs_which")
+    [ -n "$f" ] && [ -f "$f" ] || die "no $logs_which log in lane $id yet"
+    printf '== %s (last %s lines) ==\n' "$f" "$logs_n"
+    tail -n "$logs_n" "$f"
+}
+
+cmd_stop() {
+    stop_stack
+    lock_release
+    rm -f "$lane/gamescope.pid" "$lane/keeper.sh"
+    if [ $purge -eq 1 ]; then
+        rm -rf "$lane"
+        printf 'lane %s stopped and purged\n' "$id"
+    else
+        printf 'lane %s stopped (evidence kept: %s)\n' "$id" "$lane"
+    fi
+}
+
+cmd_list() {
+    [ -d "$state_root" ] || { printf 'no lanes under %s\n' "$state_root"; return 0; }
+    for d in "$state_root"/*; do
+        [ -d "$d" ] || continue
+        cls=$(cat "$d/class" 2>/dev/null || echo -)
+        up=down
+        [ -f "$d/gamescope.pid" ] && kill -0 "$(cat "$d/gamescope.pid")" 2>/dev/null && up=up
+        printf '%-14s gamescope=%-4s class=%-6s videos=%s\n' \
+            "$(basename "$d")" "$up" "$cls" "$(ls "$d/video"/*.mkv 2>/dev/null | wc -l)"
+    done
+}
+
+cmd_status() {
+    printf 'lane\t%s\nstate\t%s\nclass\t%s\n' "$id" "$lane" "$class"
+    if lane_up; then printf 'gamescope\tup (pid %s)\n' "$(cat "$lane/gamescope.pid")"; else printf 'gamescope\tdown\n'; fi
+    if pid_alive "$lane/pipewire.pid"; then printf 'pipewire\tup\n'; else printf 'pipewire\tdown\n'; fi
+    if pid_alive "$lane/play.pid"; then printf 'play\tup (pid %s)\n' "$(cat "$lane/play.pid")"; else printf 'play\tdown\n'; fi
+    if record_active; then printf 'record\tup (%s)\n' "$(cat "$lane/record.name")"; else printf 'record\tdown\n'; fi
+    [ -n "$(child_env DISPLAY)" ] && printf 'display\t%s (%s)\n' "$(child_env DISPLAY)" "$size @ ${fps}fps"
+    printf 'proton\t%s\n' "${proton:-none}"
+    f=$(last_file "$lane/video/*.mkv"); [ -n "$f" ] && printf 'last video\t%s\n' "$f"
+    return 0
+}
+
+case $cmd in
+    start) cmd_start ;;
+    seed) cmd_seed ;;
+    env) cmd_env ;;
+    cli) cmd_cli ;;
+    play) cmd_play ;;
+    shot) cmd_shot ;;
+    burst) cmd_burst ;;
+    record)
+        set -- $args
+        case ${1:-} in
+            start) record_start "${2:-record}" ;;
+            stop) record_stop ;;
+            *) die "record takes start|stop [NAME]" ;;
+        esac ;;
+    key) cmd_key ;;
+    type) cmd_type ;;
+    click) cmd_click ;;
+    move) cmd_move ;;
+    drive) cmd_drive ;;
+    report) cmd_report ;;
+    logs) cmd_logs ;;
+    status) cmd_status ;;
+    list) cmd_list ;;
+    stop) cmd_stop ;;
+    -h|--help|help) usage 0 ;;
+    *) usage 2 ;;
+esac
