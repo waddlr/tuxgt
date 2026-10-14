@@ -127,6 +127,8 @@ src/launcher/                  # C preload + wrapper (libtuxgt-launcher.so, tuxg
 src/tuxgt/tuxgt-app/           # GUI + CLI binary (crate name `tuxgt`, assets under assets/)
 src/tuxgt/tuxgt-core/          # core library (plugins, registry, scan, mods, launch, sqlx index)
 src/tuxgt/tools/gui-session    # headless sway lane for screenshots/tests (not the product)
+src/tuxgt/tools/game-session   # headless gamescope lane for in-game proof (tests/test_game_reshade.sh)
+src/tuxgt/tools/game-fixture/  # deterministic D3D11 test game for the game lane
 src/protonfixes-hook/          # tuxgt_apply.py, tuxgt.py, default.py, default_wrap.py
 mods/official/                 # shipped recipes (reshade, optiscaler, d3dcompiler-47)
 mods/templates/                # Add Pack templates (8 files, shipped at share/templates/)
