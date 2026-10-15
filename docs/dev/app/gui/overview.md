@@ -108,10 +108,10 @@ Do **not** push: filters, search, Play, theme, or the titlebar sidebar toggle.
 
 Back/forward restore the place (game id + tab, settings tab, library
 grid/list). They do not push. Restoring a place updates live nav/selection/tab
-and persists `last_game` / `view` for that place (so restart matches the
-current page). The stack itself is not persisted. Game inner tab is not a
-prefs key: restart of a game opens **General**. Legacy `view = "prefix"`
-opens Game → General.
+and persists `last_game` / `view` for that place. The stack itself is not
+persisted. A launch when nothing is running opens Library (see Tray).
+Game inner tab is not a prefs key: a tray Show of a game opens **General**.
+Legacy `view = "prefix"` opens Game → General on that Show.
 
 ### Host identity (Settings)
 
@@ -152,7 +152,12 @@ GUI exits, so a hidden session is one small SNI client instead of the
 whole window/GPU/font working set. The stub re-reads prefs and recents
 (nothing is handed off); any Show respawns the GUI to the persisted
 page and the stub leaves, and a second `tuxgt gui` while hidden is
-answered the same way.
+answered the same way. A launch when nothing is running (`tuxgt` or
+`tuxgt gui`, no session) opens Library instead: `library-list` is kept,
+and `game`, `prefix`, or `settings` is rewritten to `library` before the
+window loads. A launch that sees a live session and then takes the
+prefix (lost ack during handoff) keeps the persisted page. Tray Show
+is unchanged.
 A Hide is refused while a transfer, mutation, or parked confirm is in
 flight (busy line); Quit always terminates. A Play failure while hidden
 waits in the prefix for the next window's status line. The catalog

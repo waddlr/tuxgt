@@ -80,10 +80,20 @@ impl Labels {
     }
 }
 
-pub fn run(strings: Strings) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(strings: Strings, restore: bool) -> Result<(), Box<dyn std::error::Error>> {
     set_trim_threshold();
     let focus_running = match single_instance::acquire(&data_dir())? {
-        Acquire::Primary(primary) => Some(primary.start()),
+        Acquire::Primary(primary) => {
+            // A second launch that finds a live session returns above.
+            // Taking the prefix only after seeing one (lost ack while the
+            // tray stub is leaving) is that same session, not a cold launch.
+            let cold = primary.cold();
+            let running = primary.start();
+            if !restore && cold {
+                apply_cold_launch();
+            }
+            Some(running)
+        }
         Acquire::Existing => return Ok(()),
     };
     let prefs = Prefs::load();
@@ -171,3 +181,73 @@ fn set_trim_threshold() {
 
 #[cfg(not(target_env = "gnu"))]
 fn set_trim_threshold() {}
+
+/// A launch with no session opens Library. List density stays. Game,
+/// Settings, and legacy `prefix` rewrite to grid Library and are saved,
+/// so a later tray Show of this session restores Library.
+fn apply_cold_launch() {
+    let mut prefs = Prefs::load();
+    if prefs.view == "library" || prefs.view == "library-list" {
+        return;
+    }
+    // Unknown values already open Library (`load_open_data`'s fallback).
+    // Only the pages that would open elsewhere are rewritten.
+    if !matches!(prefs.view.as_str(), "game" | "prefix" | "settings") {
+        return;
+    }
+    prefs.view = "library".into();
+    prefs.save();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_cold_launch;
+    use super::Prefs;
+
+    /// Cold launch rewrites Game/Settings/prefix to Library and leaves a
+    /// Library page, including list density, alone. `TUXGT_CONFIG` scopes
+    /// the prefs; nothing here needs a window.
+    #[test]
+    fn cold_launch_opens_library() {
+        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("tuxgt-cold-launch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp config");
+        let prev = std::env::var_os("TUXGT_CONFIG");
+        std::env::set_var("TUXGT_CONFIG", &dir);
+
+        let mut prefs = Prefs::load();
+        prefs.view = "game".into();
+        prefs.last_game = Some("steam:1".into());
+        prefs.settings_tab = "mods".into();
+        prefs.save();
+        apply_cold_launch();
+        let prefs = Prefs::load();
+        assert_eq!(prefs.view, "library");
+        assert_eq!(prefs.last_game.as_deref(), Some("steam:1"));
+        assert_eq!(prefs.settings_tab, "mods");
+
+        for view in ["settings", "prefix"] {
+            let mut prefs = Prefs::load();
+            prefs.view = view.into();
+            prefs.save();
+            apply_cold_launch();
+            assert_eq!(Prefs::load().view, "library", "{view}");
+        }
+
+        for view in ["library", "library-list", "", "other"] {
+            let mut prefs = Prefs::load();
+            prefs.view = view.into();
+            prefs.save();
+            apply_cold_launch();
+            assert_eq!(Prefs::load().view, view, "{view}");
+        }
+
+        match prev {
+            Some(v) => std::env::set_var("TUXGT_CONFIG", v),
+            None => std::env::remove_var("TUXGT_CONFIG"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

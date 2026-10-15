@@ -69,8 +69,11 @@ fn acquire_or_yield(
 /// GUI's handshake retries across that exit.
 fn spawn_gui() -> std::io::Result<()> {
     let exe = std::env::current_exe()?;
+    // `--restore` keeps the persisted page. A launch with no session
+    // omits it and opens Library.
     std::process::Command::new(exe)
         .arg("gui")
+        .arg("--restore")
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())

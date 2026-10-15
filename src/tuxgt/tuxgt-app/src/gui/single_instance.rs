@@ -29,6 +29,9 @@ pub(crate) struct Primary {
     listener: UnixListener,
     path: PathBuf,
     _lock: File,
+    /// The lock was free on the first attempt. A later take saw a live
+    /// session (a handoff whose ack was lost) and is not a cold launch.
+    cold: bool,
 }
 
 pub(crate) struct FocusRequest {
@@ -63,7 +66,14 @@ impl Primary {
             listener,
             path,
             _lock: lock,
+            cold: false,
         }))
+    }
+
+    /// Free on the first lock attempt. False when a live session was seen
+    /// before this process took the prefix.
+    pub(crate) fn cold(&self) -> bool {
+        self.cold
     }
 
     pub(crate) fn start(self) -> Running {
@@ -71,6 +81,7 @@ impl Primary {
             listener,
             path,
             _lock,
+            cold: _,
         } = self;
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
@@ -108,10 +119,13 @@ impl Primary {
 
 pub(crate) fn acquire(data_dir: &Path) -> io::Result<Acquire> {
     let mut last_error = None;
+    let mut saw_session = false;
     for _ in 0..CONNECT_ATTEMPTS {
-        if let Some(primary) = Primary::listen(data_dir)? {
+        if let Some(mut primary) = Primary::listen(data_dir)? {
+            primary.cold = !saw_session;
             return Ok(Acquire::Primary(primary));
         }
+        saw_session = true;
         match connect_existing(data_dir) {
             Ok(Acquire::Existing) => return Ok(Acquire::Existing),
             Ok(Acquire::Primary(_)) => unreachable!("connect_existing cannot be primary"),
@@ -225,6 +239,7 @@ mod tests {
             Acquire::Primary(primary) => primary,
             Acquire::Existing => panic!("first launch became secondary"),
         };
+        assert!(primary.cold(), "a free prefix is a cold launch");
         let running = primary.start();
         let responder = std::thread::spawn(move || {
             let request = running.receiver.recv().unwrap();
@@ -232,6 +247,25 @@ mod tests {
         });
         assert!(matches!(acquire(&dir).unwrap(), Acquire::Existing));
         responder.join().unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The accept thread dies on the first request without acking, so the
+    /// client sees a transient close and takes the prefix itself. That take
+    /// saw a live session and must not count as a cold launch.
+    #[test]
+    fn handoff_take_is_not_a_cold_launch() {
+        let dir = test_dir("handoff");
+        let primary = match acquire(&dir).unwrap() {
+            Acquire::Primary(primary) => primary,
+            Acquire::Existing => panic!("first launch became secondary"),
+        };
+        drop(primary.start());
+        let taken = match acquire(&dir).unwrap() {
+            Acquire::Primary(primary) => primary,
+            Acquire::Existing => panic!("handoff take stayed secondary"),
+        };
+        assert!(!taken.cold());
         let _ = std::fs::remove_dir_all(dir);
     }
 

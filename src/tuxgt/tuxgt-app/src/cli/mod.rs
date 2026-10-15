@@ -53,7 +53,7 @@ pub(crate) use util::{
 pub async fn run_cli(cmd: Cmd, strings: &Strings) -> CliResult {
     tracing::debug!(cmd = ?std::env::args().collect::<Vec<_>>(), "cli entry");
     match cmd {
-        Cmd::Gui => unreachable!("gui is handled before the CLI runtime"),
+        Cmd::Gui { .. } => unreachable!("gui is handled before the CLI runtime"),
         Cmd::Tray { .. } => unreachable!("tray is handled before the CLI runtime"),
         Cmd::Install { prefix, yes, check } => install::run(prefix, yes, check),
         Cmd::Uninstall { yes } => install::uninstall(yes),
@@ -69,7 +69,7 @@ pub async fn run_cli(cmd: Cmd, strings: &Strings) -> CliResult {
             let dir = data_dir();
             let pool = open_db(&dir).await?;
             match other {
-                Cmd::Gui
+                Cmd::Gui { .. }
                 | Cmd::Tray { .. }
                 | Cmd::Install { .. }
                 | Cmd::Uninstall { .. }

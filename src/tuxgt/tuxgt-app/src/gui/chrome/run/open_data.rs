@@ -5,8 +5,9 @@ use super::super::super::*;
 use super::super::*;
 
 /// Window data for one open, loaded from persisted prefs through the one
-/// load path. Built fresh per open so a Show follows the persisted place
-/// (view/last_game) like a fresh boot to that page — never a stale snapshot.
+/// load path. A cold launch has already rewritten a non-Library `view` to
+/// Library. A tray Show (`gui --restore`) leaves `view` alone, so this
+/// follows the persisted place. Built fresh per open — never a stale snapshot.
 pub(super) struct OpenData {
     pub(super) prefs: Prefs,
     pub(super) nav: Nav,

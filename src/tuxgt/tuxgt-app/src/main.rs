@@ -25,7 +25,12 @@ pub(crate) struct Cli {
 #[derive(Subcommand)]
 pub(crate) enum Cmd {
     /// Open the desktop window
-    Gui,
+    Gui {
+        /// Tray Show respawn: open the persisted page. A launch when
+        /// nothing is running omits this and opens Library.
+        #[arg(long, hide = true)]
+        restore: bool,
+    },
     /// Serve the tray while hidden (spawned by Hide; a manual start with a
     /// live session yields at once)
     #[command(hide = true)]
@@ -365,7 +370,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     match cli.cmd {
-        None | Some(Cmd::Gui) => gui::run(strings),
+        None => gui::run(strings, false),
+        Some(Cmd::Gui { restore }) => gui::run(strings, restore),
         Some(Cmd::Tray { handoff }) => gui::run_tray(strings, handoff),
         Some(cmd) => {
             let rt = tokio::runtime::Runtime::new()?;

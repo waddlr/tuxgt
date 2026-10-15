@@ -143,6 +143,6 @@ File: `$PREFIX/config/ui.toml` (`config_dir()`). GUI-only.
 | `settings_tab` | `general` \| `core-plugins` \| `game-env` \| `mods` | unset → General |
 | `settings_mods_tab` | `optiscaler` \| `reshade` \| `custom` | `optiscaler` |
 | `debug_log` | `true` \| `false` | `false` (About switch; read at next start when `RUST_LOG`/`TUXGT_DEBUG` unset) |
-Legacy `view = "prefix"` reads as `game` with General selected (prefix content lives on General). Missing or unknown `settings_tab` → General. Game inner tab is not a prefs key (that history is in-session). Back/forward history is not a key. No other keys without a product decision.
+Legacy `view = "prefix"` reads as `game` with General selected (prefix content lives on General). A launch with no session rewrites `game`, `prefix`, and `settings` to `library` before open (`library-list` stays). Tray Show reads `view` as stored. Missing or unknown `settings_tab` → General. Game inner tab is not a prefs key (that history is in-session). Back/forward history is not a key. No other keys without a product decision.
 
 Code: `src/tuxgt/tuxgt-app/src/gui/prefs.rs`, `gui/theme/`.
