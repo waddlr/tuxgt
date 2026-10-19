@@ -33,7 +33,13 @@ pub(super) async fn setup(tag: &str, with_game: bool) -> Fx {
     }
     let pool = crate::open_db(&data).await.unwrap();
     let gid = format!("manual:standalone:{tag}");
-    let exe = dir.join("game.exe");
+    // Live install root is the effective exe's parent. Keep that parent on
+    // `game` so park assertions read the directory the adapter writes.
+    let exe = if with_game {
+        game.join("game.exe")
+    } else {
+        dir.join("game.exe")
+    };
     fs::write(&exe, b"MZ").unwrap();
     let install = with_game.then(|| game.to_string_lossy().into_owned());
     seed_game(
