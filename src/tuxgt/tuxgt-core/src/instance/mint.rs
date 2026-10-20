@@ -365,6 +365,7 @@ fn minted_mod(spec: &RecipeSpec, slug: &str) -> Mod {
         source: spec.source.clone(),
         plans_allowed: vec![Plan::Install, Plan::Preload].into_boxed_slice(),
         sha256: None,
+        pin_of: None,
         payload,
         games: spec.games.clone().into_boxed_slice(),
         appids: spec.appids.clone().into_boxed_slice(),

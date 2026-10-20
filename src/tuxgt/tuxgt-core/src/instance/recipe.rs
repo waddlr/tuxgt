@@ -79,6 +79,9 @@ pub struct Mod {
     pub source: SourceRef,
     pub plans_allowed: Box<[Plan]>,
     pub sha256: Option<String>,
+    /// Parent id when this user mod is a frozen copy of an unpinned mod.
+    /// Absent on every recipe that still tracks its source.
+    pub pin_of: Option<String>,
     /// Ordered payload rules: which extracted files enter the manifest.
     pub payload: Box<[PayloadRule]>,
     /// Case-insensitive display-name globs this recipe applies to.
@@ -141,6 +144,9 @@ pub(crate) struct RecipeFile {
     pub(crate) plans_allowed: Box<[String]>,
     #[serde(default)]
     pub(crate) sha256: Option<String>,
+    /// Parent id of a user-level frozen copy. Absent means unpinned.
+    #[serde(default)]
+    pub(crate) pin_of: Option<String>,
     #[serde(default)]
     pub(crate) payload: Box<[PayloadRule]>,
     #[serde(default)]

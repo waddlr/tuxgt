@@ -1,3 +1,4 @@
+mod pin;
 mod update;
 
 use std::collections::HashMap;

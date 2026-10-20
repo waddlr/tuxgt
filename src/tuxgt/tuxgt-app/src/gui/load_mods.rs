@@ -24,6 +24,10 @@ pub(crate) fn load_mods_for(
     // those so they are not offered for install; not-ready `provided`
     // recipes stay in it and carry their file status on the row.
     let catalog = list_mods(&config_dir(), &data).ok();
+    let pin_copies = catalog
+        .as_ref()
+        .map(|l| pin_label_map(&l.mods))
+        .unwrap_or_default();
     let manifests = game_manifests(&data, game_id).unwrap_or_default();
     let req_owned: Vec<Vec<&str>> = manifests
         .iter()
@@ -56,7 +60,7 @@ pub(crate) fn load_mods_for(
             let asset = source_asset(&i.source);
             let payload_present = tuxgt_core::payload_has_files(&data, i);
             if let Some(m) = manifests.iter().find(|m| m.instance == i.id) {
-                rows.push(mod_row_from_manifest(
+                let mut row = mod_row_from_manifest(
                     m,
                     &i.label,
                     i.official,
@@ -67,10 +71,12 @@ pub(crate) fn load_mods_for(
                     diag.as_ref(),
                     strings,
                     game_id,
-                ));
+                );
+                stamp_pin(&mut row, i, &pin_copies, &m.provenance.source);
+                rows.push(row);
             } else {
                 let ids = ModIds::for_instance(&i.id, game_id);
-                rows.push(ModRow {
+                let mut row = ModRow {
                     instance: i.id.clone(),
                     label: i.label.clone(),
                     mod_type: i.mod_type.clone(),
@@ -92,8 +98,15 @@ pub(crate) fn load_mods_for(
                     asset,
                     payload_present,
                     provided: provided_status(&data, i).1,
+                    pin_of: None,
+                    pin_version: None,
+                    pin_labels: Vec::new(),
+                    pinnable: false,
+                    provenance_source: String::new(),
                     ids,
-                });
+                };
+                stamp_pin(&mut row, i, &pin_copies, "");
+                rows.push(row);
             }
         }
     }
@@ -108,7 +121,7 @@ pub(crate) fn load_mods_for(
             .as_ref()
             .and_then(|l| l.mods.iter().find(|i| i.id == m.instance))
         {
-            rows.push(mod_row_from_manifest(
+            let mut row = mod_row_from_manifest(
                 m,
                 &i.label,
                 i.official,
@@ -119,7 +132,9 @@ pub(crate) fn load_mods_for(
                 diag.as_ref(),
                 strings,
                 game_id,
-            ));
+            );
+            stamp_pin(&mut row, i, &pin_copies, &m.provenance.source);
+            rows.push(row);
             continue;
         }
         // Recipe gone from the catalog: officialness unknown and no
@@ -201,8 +216,36 @@ pub(crate) fn mod_row_from_manifest(
         asset,
         payload_present,
         provided: None,
+        pin_of: None,
+        pin_version: None,
+        pin_labels: Vec::new(),
+        pinnable: false,
+        provenance_source: String::new(),
         ids,
     }
+}
+
+fn pin_label_map(mods: &[tuxgt_core::Mod]) -> std::collections::HashMap<String, Vec<String>> {
+    let mut map = std::collections::HashMap::<String, Vec<String>>::new();
+    for m in mods {
+        if let Some(parent) = &m.pin_of {
+            map.entry(parent.clone()).or_default().push(m.label.clone());
+        }
+    }
+    map
+}
+
+fn stamp_pin(
+    row: &mut ModRow,
+    inst: &tuxgt_core::Mod,
+    copies: &std::collections::HashMap<String, Vec<String>>,
+    source: &str,
+) {
+    row.pin_of = inst.pin_of.clone();
+    row.pin_version = tuxgt_core::pinned_version(inst);
+    row.pin_labels = copies.get(&inst.id).cloned().unwrap_or_default();
+    row.pinnable = tuxgt_core::is_pinnable(inst);
+    row.provenance_source = source.to_string();
 }
 
 /// Sibling `.dll` dest's file name: the preload/install proxy slot.
@@ -298,6 +341,7 @@ pub(crate) fn load_instances() -> Vec<InstanceRow> {
         .iter()
         .map(|m| (m.id.clone(), m.label.clone()))
         .collect();
+    let pin_copies = pin_label_map(&listed.mods);
     listed
         .mods
         .into_iter()
@@ -315,6 +359,9 @@ pub(crate) fn load_instances() -> Vec<InstanceRow> {
                 _ => tuxgt_core::payload_provenance(&data, &i),
             };
             let facts = super::instance_facts::instance_facts(&i, &labels, prov.as_ref(), ready);
+            let pin_version = tuxgt_core::pinned_version(&i);
+            let pin_labels = pin_copies.get(&i.id).cloned().unwrap_or_default();
+            let pinnable = tuxgt_core::is_pinnable(&i);
             InstanceRow {
                 id: i.id,
                 label: i.label,
@@ -330,6 +377,10 @@ pub(crate) fn load_instances() -> Vec<InstanceRow> {
                 provided,
                 ids,
                 facts,
+                pin_of: i.pin_of,
+                pin_version,
+                pin_labels,
+                pinnable,
             }
         })
         .collect()

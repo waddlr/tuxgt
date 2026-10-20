@@ -93,6 +93,14 @@ pub(crate) enum ModsCmd {
         #[command(subcommand)]
         cmd: MintCmd,
     },
+    /// Duplicate an unpinned mod into a user copy frozen to one version
+    Pin {
+        /// Mod id
+        id: String,
+        /// Freeze this game's install record instead of the catalog payload
+        #[arg(long)]
+        game: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

@@ -210,6 +210,7 @@ pub(super) fn build_window(ctx: &Ctx, cx: &mut App) -> Option<LiveWindow> {
                 registries: Box::default(),
                 remote_plugins: Box::default(),
                 registry_busy: false,
+                pin_busy: false,
                 registry_error: None,
                 registry_confirm: None,
                 add_form: None,

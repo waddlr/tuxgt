@@ -21,18 +21,55 @@ impl Shell {
         view: Entity<Self>,
         cx: &App,
     ) -> AnyElement {
+        let bits = self.mods.get(game_id).and_then(|rows| {
+            rows.iter().find(|r| r.instance == instance).map(|r| {
+                let marked = self.mod_updates.get(&(game_id.to_string(), r.instance.clone())).is_some_and(|status| {
+                    matches!(status, UpdateStatus::Unknown { reason } if reason.contains("pinned version unavailable"))
+                });
+                (
+                    r.pin_of.is_some(),
+                    r.pinnable && !r.provenance_source.is_empty(),
+                    r.pin_labels.clone(),
+                    r.pin_version.clone(),
+                    marked || r.pin_version.is_none(),
+                )
+            })
+        });
+        if let Some((true, _, _, version, unavailable)) = bits.as_ref() {
+            return self.pin_card_note(version.as_deref(), *unavailable, cx);
+        }
+        let update = self.update_affordance(game_id, instance, view.clone(), cx);
+        let (show_pin, names) = match bits {
+            Some((false, pin, names, _, _)) => (pin, names),
+            _ => (false, Vec::new()),
+        };
+        if !show_pin && names.is_empty() {
+            return update.unwrap_or_else(|| div().into_any_element());
+        }
+        self.pin_update_cluster(game_id, instance, show_pin, &names, update, view, cx)
+    }
+
+    /// Update control for a parent card. `None` is the quiet UpToDate /
+    /// still-checking box. A pinned copy never reaches this.
+    fn update_affordance(
+        &self,
+        game_id: &str,
+        instance: &str,
+        view: Entity<Self>,
+        cx: &App,
+    ) -> Option<AnyElement> {
         let key = (game_id.to_string(), instance.to_string());
         // E104: poll-fresh Available wins without a GitHub hit — the poll
         // already ran `check_catalog_update`; the card reuses its verdict.
         // Unknown is never poll-fed (stays on the per-card check only).
         // Available states are button-only: no note, just Update.
         if self.catalog_updates.contains(instance) && !self.mod_updates.contains_key(&key) {
-            return self.update_button(instance, game_id, instance, view, cx);
+            return Some(self.update_button(instance, game_id, instance, view, cx));
         }
         match self.mod_updates.get(&key) {
-            Some(UpdateStatus::UpToDate) => div().into_any_element(),
+            Some(UpdateStatus::UpToDate) | None => None,
             Some(UpdateStatus::Available { .. }) => {
-                self.update_button(instance, game_id, instance, view, cx)
+                Some(self.update_button(instance, game_id, instance, view, cx))
             }
             Some(UpdateStatus::Unknown { reason }) => {
                 // E76: one short muted note — never CLI text, never the
@@ -42,15 +79,11 @@ impl Shell {
                 let key = short_update_reason(reason);
                 let note = widgets::muted(self.strings.get(key), cx);
                 if key == "gui-mod-update-unknown-files" {
-                    note.into_any_element()
+                    Some(note.into_any_element())
                 } else {
-                    self.update_cta(instance, note, game_id, instance, view, cx)
+                    Some(self.update_cta(instance, note, game_id, instance, view, cx))
                 }
             }
-            // Silent while the background check runs: same empty box as
-            // UpToDate, so landing the verdict never moves the Files
-            // accordion below.
-            None => div().into_any_element(),
         }
     }
 

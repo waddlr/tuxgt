@@ -79,6 +79,17 @@ impl Shell {
                                     .flex_shrink_0()
                                     .gap_1()
                                     .items_center()
+                                    .when(i.pinnable, |this| {
+                                        let id = i.id.clone();
+                                        let pin_view = view.clone();
+                                        this.child(self.pin_version_button(
+                                            pin_view,
+                                            SharedString::from(format!("pin-{id}")),
+                                            id,
+                                            None,
+                                            cx,
+                                        ))
+                                    })
                                     .child(self.details_button(view.clone(), i, details_open, cx))
                                     .when(tools, |this| {
                                         let export_id = i.id.clone();
@@ -182,41 +193,53 @@ impl Shell {
                                     }),
                             ),
                     )
+                    .when(!i.pin_labels.is_empty(), |this| {
+                        this.child(self.pin_copy_line(&i.pin_labels, cx))
+                    })
+                    .when(i.pin_of.is_some(), |this| {
+                        let unavailable = i.pin_version.is_none() || !i.payload_present;
+                        this.child(self.pin_card_note(i.pin_version.as_deref(), unavailable, cx))
+                    })
                     .when(!i.description.is_empty(), |this| {
                         this.child(widgets::muted(i.description.clone(), cx))
                     })
                     .when(!i.note.is_empty(), |this| {
                         this.child(widgets::muted(i.note.clone(), cx))
                     })
-                    .when(self.catalog_updates.contains(&i.id), |this| {
-                        let id = i.id.clone();
-                        let view = view.clone();
-                        this.child(
-                            h_flex()
-                                .gap_2()
-                                .items_center()
-                                .child(
-                                    div()
-                                        .tx(types(cx).body_md)
-                                        .text_color(cx.theme().warning)
-                                        .child(self.strings.get("gui-mod-update-available-short")),
-                                )
-                                .child(
-                                    widgets::btn(i.ids.cat_update.clone(), cx)
-                                        .primary()
-                                        .child(widgets::blabel(
-                                            self.strings.get("gui-mod-action-update"),
-                                            cx,
-                                        ))
-                                        .on_click(move |_, _, cx| {
-                                            cx.stop_propagation();
-                                            view.update(cx, |this, cx| {
-                                                this.refresh_catalog_payload_ui(id.clone(), cx);
-                                            });
-                                        }),
-                                ),
-                        )
-                    })
+                    .when(
+                        i.pin_of.is_none() && self.catalog_updates.contains(&i.id),
+                        |this| {
+                            let id = i.id.clone();
+                            let view = view.clone();
+                            this.child(
+                                h_flex()
+                                    .gap_2()
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .tx(types(cx).body_md)
+                                            .text_color(cx.theme().warning)
+                                            .child(
+                                                self.strings.get("gui-mod-update-available-short"),
+                                            ),
+                                    )
+                                    .child(
+                                        widgets::btn(i.ids.cat_update.clone(), cx)
+                                            .primary()
+                                            .child(widgets::blabel(
+                                                self.strings.get("gui-mod-action-update"),
+                                                cx,
+                                            ))
+                                            .on_click(move |_, _, cx| {
+                                                cx.stop_propagation();
+                                                view.update(cx, |this, cx| {
+                                                    this.refresh_catalog_payload_ui(id.clone(), cx);
+                                                });
+                                            }),
+                                    ),
+                            )
+                        },
+                    )
                     .when(provided && !ready, |this| {
                         this.when_some(missing_el, |this, el| this.child(el))
                             .when_some(ambiguous_el, |this, el| this.child(el))
@@ -237,7 +260,7 @@ impl Shell {
         let gap = cx.theme().font_size * 0.25;
         let header = t.headline_md.line.max(t.control_h);
         let mut h = header + gap * 2. + px(2.);
-        let (has_description, has_note, pattern_lens) = {
+        let (has_description, has_note, pattern_lens, pin_line, pin_note, show_update) = {
             let Some(i) = self.instances.iter().find(|r| r.id == id) else {
                 return h;
             };
@@ -249,7 +272,14 @@ impl Shell {
             } else {
                 None
             };
-            (!i.description.is_empty(), !i.note.is_empty(), lenses)
+            (
+                !i.description.is_empty(),
+                !i.note.is_empty(),
+                lenses,
+                !i.pin_labels.is_empty(),
+                i.pin_of.is_some(),
+                i.pin_of.is_none() && self.catalog_updates.contains(id),
+            )
         };
         if has_description {
             h += gap + t.body_md.line;
@@ -257,7 +287,13 @@ impl Shell {
         if has_note {
             h += gap + t.body_md.line;
         }
-        if self.catalog_updates.contains(id) {
+        if pin_line {
+            h += gap + t.body_md.line;
+        }
+        if pin_note {
+            h += gap + t.body_md.line;
+        }
+        if show_update {
             h += gap + t.control_h;
         }
         if let Some(lenses) = pattern_lens {

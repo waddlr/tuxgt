@@ -275,6 +275,10 @@ mod tests {
             provided: None,
             ids: InstanceIds::for_id(id),
             facts: InstanceFacts::empty(),
+            pin_of: None,
+            pin_version: None,
+            pin_labels: Vec::new(),
+            pinnable: false,
         }
     }
 

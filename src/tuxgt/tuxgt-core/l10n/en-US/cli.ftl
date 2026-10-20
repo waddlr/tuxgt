@@ -698,6 +698,15 @@ gui-title-export = Export mod
 gui-status-instance-exported = exported instance { $id }
 gui-status-err-export = export failed: { $error }
 
+gui-action-pin-version = Pin this version
+gui-pin-copy-line = Pinned copy: { $names }
+gui-pin-card-note = Pinned to { $version }. This copy does not track latest.
+gui-pin-badge = Pinned
+gui-pin-unavailable = Pinned version unavailable
+gui-status-pinned = Pinned { $version } as { $name }
+gui-status-pin-exists = Already pinned as { $name }
+gui-status-err-pin = pin failed: { $error }
+
 gui-section-about-app = About
 gui-action-repo = Repo
 gui-action-check-updates = Check for updates

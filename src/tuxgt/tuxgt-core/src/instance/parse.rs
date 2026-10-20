@@ -259,6 +259,16 @@ pub(crate) fn parse_recipe(text: &str, official: bool) -> Result<Mod> {
             ));
         }
     };
+    let pin_of = match recipe.pin_of {
+        None => None,
+        Some(id) if id.is_empty() || !valid_id(&id) => {
+            return Err(Error::InvalidInstance("bad pin_of".into()));
+        }
+        Some(_) if recipe.sha256.as_ref().is_some_and(|s| !s.is_empty()) => {
+            return Err(Error::InvalidInstance("pin_of is not a recipe sha".into()));
+        }
+        Some(id) => Some(id),
+    };
     Ok(Mod {
         id: recipe.id,
         mod_type: recipe.mod_type,
@@ -267,6 +277,7 @@ pub(crate) fn parse_recipe(text: &str, official: bool) -> Result<Mod> {
         source,
         plans_allowed: plans.into_boxed_slice(),
         sha256: recipe.sha256,
+        pin_of,
         payload: recipe.payload,
         games: games.into_boxed_slice(),
         appids: recipe.appids,

@@ -242,6 +242,8 @@ pub(crate) struct ExportRecipeToml<'a> {
     #[serde(skip_serializing_if = "export_opt_none")]
     sha256: &'a Option<String>,
     #[serde(skip_serializing_if = "export_opt_none")]
+    pin_of: &'a Option<String>,
+    #[serde(skip_serializing_if = "export_opt_none")]
     shader_dir: &'a Option<String>,
     #[serde(skip_serializing_if = "export_opt_none")]
     texture_dir: &'a Option<String>,
@@ -363,6 +365,7 @@ pub(crate) fn export_recipe_text(
         include: &inst.include,
         env: &inst.env,
         sha256: &inst.sha256,
+        pin_of: &inst.pin_of,
         shader_dir: &inst.shader_dir,
         texture_dir: &inst.texture_dir,
         effect_files: &inst.effect_files,

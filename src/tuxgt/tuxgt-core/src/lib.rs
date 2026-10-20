@@ -81,11 +81,12 @@ pub use install::{
 pub use instance::{
     add_mod, add_mod_from, add_mod_from_with_password, add_mod_with_password, apply_package_slot,
     classify_package, classify_package_with_password, clear_bulk_disabled, disable_mod, enable_mod,
-    export_mod, family_template, list_mods, list_templates, migrate_reshade_legacy, mint_recipe,
-    mods_for_game, read_bulk_disabled, record_bulk_disabled, remove_mod, rescan_mod,
-    rescan_preview, resolve_source, scan_default_include, scan_package, set_mod_offered,
-    snap_family_asset, unrecord_bulk_games, Classification, ClassifyKind, MintTarget, Mod, ModList,
-    ModProblem, ModTemplate, PackageFile, PayloadRule, Plan, RecipeSpec, SourceRef, TemplateFamily,
+    export_mod, family_template, is_pinnable, list_mods, list_templates, migrate_reshade_legacy,
+    mint_recipe, mods_for_game, pin_version, pinned_version, read_bulk_disabled,
+    record_bulk_disabled, remove_mod, rescan_mod, rescan_preview, resolve_source,
+    scan_default_include, scan_package, set_mod_offered, snap_family_asset, unrecord_bulk_games,
+    Classification, ClassifyKind, MintTarget, Mod, ModList, ModProblem, ModTemplate, PackageFile,
+    PayloadRule, PinResult, Plan, RecipeSpec, SourceRef, TemplateFamily,
 };
 pub use launch::{
     apply_mod_env, build_launch_spec, game_launch_needs, is_argv_wrapper, LaunchNeeds, LaunchPaths,

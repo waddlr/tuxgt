@@ -57,20 +57,7 @@ async fn poll_catalog(
         .iter()
         .map(|r| (r.id.as_str(), r.asset_sha256.as_str()))
         .collect();
-    let games = tuxgt_core::list_games(pool, None, None, None).await?;
-    let mut per_game = Vec::new();
-    for g in &games {
-        let manifests = tuxgt_core::game_manifests(data, &g.id).unwrap_or_default();
-        let stale = super::poll_attention::stale_instance_count(
-            manifests
-                .iter()
-                .map(|m| (m.instance.as_str(), m.provenance.asset_sha256.as_str())),
-            &sha_of,
-        );
-        if stale > 0 {
-            per_game.push((g.id.clone(), stale));
-        }
-    }
+    let per_game = super::poll_attention::poll_per_game(pool, data, &sha_of).await?;
     // Self-update rides the same run (no new timer): one latest-release
     // hit next to the catalog hits. The check is infallible (failures are
     // Unknown), so it cannot fail the poll.

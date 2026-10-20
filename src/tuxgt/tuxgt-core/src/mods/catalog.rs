@@ -44,6 +44,33 @@ async fn check_catalog_update_inner(
         record_catalog_status(pool, mod_id, now, &status).await;
         return Ok(status);
     };
+    if inst.pin_of.is_some() {
+        // A frozen copy never follows the parent and never reports Available.
+        let status = match crate::instance::pin_frozen_url(&inst) {
+            Some(url) => {
+                let payload = crate::instance::payload_dir(
+                    data_dir,
+                    inst.official,
+                    inst.registry.as_deref(),
+                    &inst.id,
+                );
+                let same = crate::instance::read_payload_provenance(&payload)
+                    .is_some_and(|p| p.source == url);
+                if same {
+                    CatalogStatus::UpToDate
+                } else {
+                    CatalogStatus::Unknown {
+                        reason: crate::instance::pin_unavailable(&inst.id),
+                    }
+                }
+            }
+            None => CatalogStatus::Unknown {
+                reason: crate::instance::pin_unavailable(&inst.id),
+            },
+        };
+        record_catalog_status(pool, mod_id, now, &status).await;
+        return Ok(status);
+    }
     let source = crate::instance::resolve_source(&inst);
     // A one-file provided recipe may set sha256. That pin is checked when
     // the file is provided; it is not a catalog download.

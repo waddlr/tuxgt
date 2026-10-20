@@ -151,6 +151,11 @@ pub(crate) async fn run(
             tracing::info!(source = id.as_str(), "mod exported");
         }
         ModsCmd::Mint { cmd } => return crate::cli::mint::run(pool, cmd).await,
+        ModsCmd::Pin { id, game } => {
+            let made = tuxgt_core::pin_version(&config_dir(), dir, &id, game.as_deref()).await?;
+            let verb = if made.already { "already" } else { "pinned" };
+            println!("{verb}\t{}\t{}", made.id, made.label);
+        }
         ModsCmd::Provide { id, path, password } => {
             let report = with_archive_password(password, |password| {
                 tuxgt_core::provide_files_with_password(&config_dir(), dir, &id, &path, password)

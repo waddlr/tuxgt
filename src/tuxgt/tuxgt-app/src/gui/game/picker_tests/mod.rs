@@ -24,6 +24,11 @@ fn row(instance: &str, mod_type: &str, installed: bool) -> ModRow {
         asset: None,
         payload_present: false,
         provided: None,
+        pin_of: None,
+        pin_version: None,
+        pin_labels: Vec::new(),
+        pinnable: false,
+        provenance_source: String::new(),
         ids: ModIds::for_instance(instance, "test-game"),
     }
 }

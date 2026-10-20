@@ -7,6 +7,7 @@ mod migrate;
 mod mint;
 mod parse;
 mod paths;
+mod pin;
 mod recipe;
 mod reshade_migrate;
 mod scan;
@@ -43,6 +44,8 @@ pub use from::{
 };
 pub use migrate::migrate_prefix;
 pub use mint::{family_template, mint_recipe, snap_family_asset, MintTarget, RecipeSpec};
+pub use pin::{is_pinnable, pin_version, pinned_version, PinResult};
+pub(crate) use pin::{pin_frozen_url, pin_unavailable};
 pub use recipe::{Mod, PayloadRule, Plan, SourceRef};
 pub use reshade_migrate::migrate_reshade_legacy;
 pub use scan::{
@@ -67,6 +70,8 @@ mod tests_export;
 mod tests_from;
 #[cfg(test)]
 mod tests_mint;
+#[cfg(test)]
+mod tests_pin;
 #[cfg(test)]
 mod tests_requires;
 #[cfg(test)]

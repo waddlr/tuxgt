@@ -184,6 +184,7 @@ pub(crate) fn mod_from_files(
         },
         plans_allowed: vec![Plan::Install, Plan::Preload].into_boxed_slice(),
         sha256: None,
+        pin_of: None,
         payload: vec![PayloadRule {
             arch: None,
             api: None,

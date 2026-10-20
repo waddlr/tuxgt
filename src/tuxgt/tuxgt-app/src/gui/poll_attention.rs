@@ -60,6 +60,7 @@ pub(crate) fn attention_keep_after_update<'a>(
 /// The shared pool reconciles on the dirty mark `write_manifest` left,
 /// so the cache sha is the payload provenance the install just recorded.
 /// `None` means the recount itself failed; the caller re-polls.
+/// A version-pinned copy is not stale: its check is never Available.
 pub(crate) async fn recount_game_stale(data: &Path, game: &str) -> Option<usize> {
     let pool = tuxgt_core::open_db_shared(data).await.ok()?;
     let rows = tuxgt_core::mod_cache_rows(&pool).await.ok()?;
@@ -68,12 +69,53 @@ pub(crate) async fn recount_game_stale(data: &Path, game: &str) -> Option<usize>
         .map(|r| (r.id.as_str(), r.asset_sha256.as_str()))
         .collect();
     let manifests = tuxgt_core::game_manifests(data, game).ok()?;
+    let pins = pin_ids(data);
     Some(stale_instance_count(
         manifests
             .iter()
+            .filter(|m| !pins.contains(m.instance.as_str()))
             .map(|m| (m.instance.as_str(), m.provenance.asset_sha256.as_str())),
         &sha_of,
     ))
+}
+
+/// Per-game stale pairs for one catalog poll. Same sha compare as
+/// [`stale_instance_count`], skipping version-pinned copies.
+pub(crate) async fn poll_per_game(
+    pool: &tuxgt_core::SqlitePool,
+    data: &Path,
+    sha_of: &HashMap<&str, &str>,
+) -> tuxgt_core::Result<Vec<(String, usize)>> {
+    let games = tuxgt_core::list_games(pool, None, None, None).await?;
+    let pins = pin_ids(data);
+    let mut per_game = Vec::new();
+    for g in &games {
+        let manifests = tuxgt_core::game_manifests(data, &g.id).unwrap_or_default();
+        let stale = stale_instance_count(
+            manifests
+                .iter()
+                .filter(|m| !pins.contains(m.instance.as_str()))
+                .map(|m| (m.instance.as_str(), m.provenance.asset_sha256.as_str())),
+            sha_of,
+        );
+        if stale > 0 {
+            per_game.push((g.id.clone(), stale));
+        }
+    }
+    Ok(per_game)
+}
+
+fn pin_ids(data: &Path) -> HashSet<String> {
+    tuxgt_core::list_mods(&tuxgt_core::config_dir(), data)
+        .map(|listed| {
+            listed
+                .mods
+                .into_iter()
+                .filter(|m| m.pin_of.is_some())
+                .map(|m| m.id)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Per-game rows a poll may publish.

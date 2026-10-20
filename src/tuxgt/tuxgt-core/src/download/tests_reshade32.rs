@@ -26,6 +26,7 @@ fn listed_mod(id: &str, source: crate::instance::SourceRef) -> crate::instance::
         source,
         plans_allowed: Box::default(),
         sha256: None,
+        pin_of: None,
         payload: Box::default(),
         games: Box::default(),
         appids: Box::default(),

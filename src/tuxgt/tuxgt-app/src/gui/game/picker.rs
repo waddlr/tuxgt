@@ -6,6 +6,7 @@ use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::Input;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme, Disableable as _, Sizable as _};
+use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use tuxgt_core::{config_dir, data_dir, list_mods, FluentArgs};
 
@@ -268,6 +269,9 @@ impl Shell {
                             })
                             .child(row.label.clone()),
                     )
+                    .when(row.pin_of.is_some(), |this| {
+                        this.child(widgets::muted(self.strings.get("gui-pin-badge"), cx))
+                    })
                     .children(preview_buttons),
             )
             .children(preview_bodies)

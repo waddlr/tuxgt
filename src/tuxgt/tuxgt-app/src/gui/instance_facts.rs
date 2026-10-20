@@ -248,6 +248,7 @@ mod tests {
             source,
             plans_allowed: Box::new([Plan::Preload, Plan::Install]),
             sha256: None,
+            pin_of: None,
             payload: Box::new([PayloadRule {
                 arch: Some("64".into()),
                 api: None,

@@ -301,7 +301,7 @@ ReShade | Custom) with the Settings Mods page’s subheads as visual breaks —
 kinds (officials first, like `pack_rows`). A section header is clickable and
 collapses that section (default expanded); subheads never collapse; empty
 sections and subheads paint nothing. Each row: clickable checkbox row + label (tooltip =
-Mod id) + previews. Multi-select. No game-level file add. A not-ready `provided`
+Mod id) + previews. A pinned copy adds a muted **Pinned** after the label; the tooltip stays the mod id. Multi-select. No game-level file add. A not-ready `provided`
 Mod (`gui.provide-during-install`) paints the recipe note plus its Missing /
 More than one match pattern lists under the name and stays checkable — Select
 Visible includes it; the files are asked for at install time, below.
@@ -386,7 +386,7 @@ Update does not confirm payload drift or per-game staged edits: the
 redownload replaces depot bytes and staged touches are kept. Foreign
 game-dir overwrites still stop on the confirm card. A successful Update
 recounts that game and drops its Attention card when nothing there is
-still stale.
+still stale. A pinnable installed parent shows secondary **Pin this version** on this row when the install recorded a source, then primary **Update** when an update exists. The same row shows `Pinned copy: {names}` when copies exist. A pinned copy shows `Pinned to {version}. This copy does not track latest.` or **Pinned version unavailable**, and never **Update**. The poll does not count a pinned copy as stale. Pinning does not install, uninstall, or update the game.
 
 ### Files + env (`gui.mod-files`, `gui.stage-status`)
 

@@ -261,6 +261,7 @@ fn reshade_package_already_in_catalog() {
         },
         plans_allowed: Box::default(),
         sha256: None,
+        pin_of: None,
         payload: Box::default(),
         games: Box::default(),
         appids: Box::default(),

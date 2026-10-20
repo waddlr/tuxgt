@@ -21,6 +21,7 @@ mod mods_box;
 mod mods_detail_view;
 mod mods_details;
 mod mods_ops;
+mod pin_ui;
 mod plugins;
 mod registry;
 mod secret;

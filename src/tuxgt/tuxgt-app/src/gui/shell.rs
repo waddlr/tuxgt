@@ -115,6 +115,8 @@ pub struct Shell {
     /// Registry network/disk work in flight. One at a time: a second click
     /// while a clone or payload fetch runs would race one `remote.toml`.
     pub(crate) registry_busy: bool,
+    /// One `pin_version` write in flight. A second click does nothing.
+    pub(crate) pin_busy: bool,
     /// The single mutation whose result failed, named so the row keeps
     /// painting its old version. Cleared by the next successful mutation.
     pub(crate) registry_error: Option<(String, String)>,

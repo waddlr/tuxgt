@@ -42,6 +42,14 @@ pub struct InstanceRow {
     /// Recipe facts for the Details disclosure. Install names and the
     /// catalog-check row live on `CatalogMeta`, not here.
     pub facts: InstanceFacts,
+    /// Parent id when this catalog row is a frozen copy.
+    pub pin_of: Option<String>,
+    /// Display version of a frozen copy. `None` when this row is not one.
+    pub pin_version: Option<String>,
+    /// Labels of frozen copies of this mod, catalog order.
+    pub pin_labels: Vec<String>,
+    /// The card may offer `Pin this version`.
+    pub pinnable: bool,
 }
 
 /// E91 Add-Mod form state (inline panel).
@@ -224,6 +232,16 @@ pub struct ModRow {
     /// the missing names while it is not ready. `None` for other sources
     /// and for installed rows.
     pub provided: Option<ProvidedRow>,
+    /// Parent id when this row is a frozen copy.
+    pub pin_of: Option<String>,
+    /// Display version of a frozen copy. `None` when this row is not one.
+    pub pin_version: Option<String>,
+    /// Labels of frozen copies of this mod, catalog order.
+    pub pin_labels: Vec<String>,
+    /// The installed card may offer `Pin this version`.
+    pub pinnable: bool,
+    /// This game's install record source. Empty means no pin button.
+    pub provenance_source: String,
     /// T24 precomputed paint ids, built once in `load_mods_for`.
     pub ids: ModIds,
 }

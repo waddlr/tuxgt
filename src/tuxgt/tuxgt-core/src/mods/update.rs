@@ -39,6 +39,20 @@ async fn check_update_inner(
 ) -> Result<UpdateStatus> {
     let manifest = crate::need_manifest(data_dir, game, instance)?;
     let prov = &manifest.provenance;
+    let Ok(inst) = find_mod(config_dir, data_dir, instance) else {
+        return Ok(UpdateStatus::Unknown {
+            reason: format!("{game} {instance}: instance recipe not found"),
+        });
+    };
+    if inst.pin_of.is_some() {
+        let frozen = crate::instance::pin_frozen_url(&inst);
+        return Ok(match frozen {
+            Some(url) if url == prov.source => UpdateStatus::UpToDate,
+            _ => UpdateStatus::Unknown {
+                reason: format!("{game} {instance}: pinned version unavailable"),
+            },
+        });
+    }
     if prov.asset_sha256.is_empty() {
         return Ok(UpdateStatus::Unknown {
             reason: format!(
@@ -46,11 +60,6 @@ async fn check_update_inner(
             ),
         });
     }
-    let Ok(inst) = find_mod(config_dir, data_dir, instance) else {
-        return Ok(UpdateStatus::Unknown {
-            reason: format!("{game} {instance}: instance recipe not found"),
-        });
-    };
     if inst
         .sha256
         .as_deref()
@@ -188,7 +197,9 @@ pub(crate) fn cached_or_payload(
 /// carries only this fixed string: never a `tuxgt …` command, never the full
 /// `manager:store:game` id. `check_update` keeps its long reasons for CLI.
 pub fn short_update_reason(reason: &str) -> &'static str {
-    if reason.contains("files not provided") {
+    if reason.contains("pinned version unavailable") {
+        "gui-pin-unavailable"
+    } else if reason.contains("files not provided") {
         "gui-mod-update-unknown-files"
     } else if reason.contains("no install provenance")
         || reason.contains("recipe not found")
@@ -232,6 +243,13 @@ pub async fn ensure_update_baseline(
 ) -> Result<Baseline> {
     let manifest = crate::need_manifest(data_dir, game, instance)?;
     if let Ok(inst) = find_mod(config_dir, data_dir, instance) {
+        if inst.pin_of.is_some() {
+            let status = check_update(data_dir, config_dir, game, instance).await?;
+            return Ok(Baseline {
+                status,
+                installed: false,
+            });
+        }
         if matches!(
             crate::instance::resolve_source(&inst),
             crate::instance::SourceRef::Provided { .. }
