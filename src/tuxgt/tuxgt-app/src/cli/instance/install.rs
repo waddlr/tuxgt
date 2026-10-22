@@ -23,6 +23,7 @@ pub(crate) async fn install_mod_cli(
         slot,
     };
     loop {
+        confirm_profile_write(pool, game).await?;
         match install_instance(
             pool,
             &data_dir(),

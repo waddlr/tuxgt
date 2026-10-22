@@ -44,7 +44,10 @@ impl Shell {
         // A mutation vetoes a Hide like a transfer: the stub handoff would
         // kill it mid-write. Held inside the future: a local would drop on
         // return, before the op starts.
+        let value_retry = value.map(|s| s.to_string());
+        let id_retry = id.clone();
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -53,6 +56,7 @@ impl Shell {
                         let pool = open_db_shared(&data_dir()).await?;
                         let host = tuxgt_core::PluginHost::load()?;
                         tuxgt_core::mutate_game(&pool, &data_dir(), &host, &game, async {
+                            tuxgt_core::ensure_profile_write(&pool, &data_dir(), &game).await?;
                             if unset {
                                 unset_knob(&pool, &game, &id).await
                             } else {
@@ -80,6 +84,7 @@ impl Shell {
                 }
                 match result {
                     Ok((id, rows, globals)) => {
+                        this.note_saved_default(was_unmodded, cx);
                         this.apply_knob_rows(rows, globals);
                         this.session_payload
                             .insert(done.clone(), super::load_payload(&done));
@@ -89,6 +94,18 @@ impl Shell {
                         args.set("id", id.clone());
                         this.status = this.strings.get_args("gui-status-knob", Some(&args));
                     }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let id = id_retry.clone();
+                                let value = value_retry.clone();
+                                move |this, cx| {
+                                    this.write_game_knob(&id, value.as_deref(), omit, cx);
+                                }
+                            },
+                            cx,
+                        ) => {}
                     Err(e) => this.status = format!("{e}"),
                 }
                 cx.notify();
@@ -109,10 +126,12 @@ impl Shell {
             on
         );
         let done = game.clone();
+        let id_retry = id.clone();
         // A mutation vetoes a Hide like a transfer: the stub handoff would
         // kill it mid-write. Held inside the future: a local would drop on
         // return, before the op starts.
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -121,6 +140,7 @@ impl Shell {
                         let pool = open_db_shared(&data_dir()).await?;
                         let host = tuxgt_core::PluginHost::load()?;
                         tuxgt_core::mutate_game(&pool, &data_dir(), &host, &game, async {
+                            tuxgt_core::ensure_profile_write(&pool, &data_dir(), &game).await?;
                             if on {
                                 enable_knob(&pool, &game, &id).await
                             } else {
@@ -140,6 +160,7 @@ impl Shell {
                 }
                 match result {
                     Ok((id, rows, globals)) => {
+                        this.note_saved_default(was_unmodded, cx);
                         this.apply_knob_rows(rows, globals);
                         this.session_payload
                             .insert(done.clone(), super::load_payload(&done));
@@ -149,6 +170,15 @@ impl Shell {
                         args.set("id", id);
                         this.status = this.strings.get_args("gui-status-knob", Some(&args));
                     }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let id = id_retry.clone();
+                                move |this, cx| this.write_game_enabled(&id, on, cx)
+                            },
+                            cx,
+                        ) => {}
                     Err(e) => this.status = format!("{e}"),
                 }
                 cx.notify();

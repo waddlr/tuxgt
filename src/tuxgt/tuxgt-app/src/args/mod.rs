@@ -1,12 +1,14 @@
 mod games;
 mod instance;
 mod mods;
+mod profile;
 
 use clap::Subcommand;
 
 pub(crate) use games::{ExtraExeCmd, GamesCmd};
 pub(crate) use instance::{FileAction, FileKeep, InstanceCmd};
 pub(crate) use mods::{CacheCmd, MintCmd, ModsCmd};
+pub(crate) use profile::ProfileCmd;
 
 #[derive(Subcommand)]
 pub(crate) enum EnvCmd {

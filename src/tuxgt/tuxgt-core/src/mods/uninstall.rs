@@ -17,6 +17,7 @@ pub async fn uninstall_instance(
 ) -> Result<()> {
     tracing::debug!(game, instance, "uninstall entry");
     let mut m = crate::need_manifest(data_dir, game, instance)?;
+    crate::ensure_profile_write(pool, data_dir, game).await?;
     let mut restored = std::collections::BTreeSet::new();
     if let Some(roots) = install_roots(pool, data_dir, game, &m).await? {
         let foreign = foreign_dests(data_dir, game, &m, &roots)?;

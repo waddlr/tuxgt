@@ -158,6 +158,9 @@ pub async fn apply_slot_picks(
     if picks.is_empty() {
         return Ok(());
     }
+    // Redirect off Unmodded before any unplace. A mid-plan switch would
+    // restore the pre-switch snapshot onto the post-switch tree.
+    crate::ensure_profile_write(pool, data_dir, game).await?;
     ensure_repick_free(data_dir, game, picks)?;
     let manifests = crate::game_manifests(data_dir, game)?;
     let plan = plan_slot_writes(&manifests, picks)?;

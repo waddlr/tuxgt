@@ -7,6 +7,7 @@ use tuxgt_core::FluentArgs;
 use super::super::theme::{brand, hsla_hex, overlay_ink, types, TypeStyled as _};
 use super::super::widgets;
 use super::super::{GameTab, Shell};
+use super::profile::HERO_BODY;
 
 /// Open a link with the system handler — the same `xdg-open` path as
 /// `widgets::open_btn` (Link), not a new crate (E57).
@@ -83,7 +84,7 @@ impl Shell {
                     .gap_1()
                     .child(
                         h_flex()
-                            .id("hero-play")
+                            .id(HERO_BODY[0])
                             .gap_2()
                             .items_center()
                             .flex_wrap()
@@ -130,8 +131,10 @@ impl Shell {
                                 })
                             }),
                     )
+                    .child(self.profile_row(view.clone(), cx))
                     .child(
                         h_flex()
+                            .id(HERO_BODY[2])
                             .gap_2()
                             .items_center()
                             .flex_wrap()
@@ -150,6 +153,7 @@ impl Shell {
                     )
                     .child(
                         div()
+                            .id(HERO_BODY[3])
                             .tx(t.headline_lg)
                             // One step above the token (20 at Default), still
                             // following `font_scale`.

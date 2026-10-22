@@ -78,7 +78,7 @@ pub(crate) async fn run(
             let platform = effective_platform(pool, &id).await?;
             require_scope(k, &platform)?;
             let value = resolve_value(k, value.as_deref())?;
-            mutate_game(pool, dir, host, &id, set_knob(pool, &id, &knob, &value)).await?;
+            owned_mutate(pool, host, dir, &id, || set_knob(pool, &id, &knob, &value)).await?;
             tracing::info!(game = id.as_str(), knob = knob.as_str(), "knob set");
         }
         EnvCmd::Unset { id, knob } => {
@@ -86,7 +86,7 @@ pub(crate) async fn run(
             if !game_exists(pool, &id).await? {
                 return Err(Error::UnknownGame(id).into());
             }
-            mutate_game(pool, dir, host, &id, unset_knob(pool, &id, &knob)).await?;
+            owned_mutate(pool, host, dir, &id, || unset_knob(pool, &id, &knob)).await?;
             tracing::info!(game = id.as_str(), knob = knob.as_str(), "knob unset");
         }
         EnvCmd::Enable { id, knob } => {
@@ -94,7 +94,7 @@ pub(crate) async fn run(
             if !game_exists(pool, &id).await? {
                 return Err(Error::UnknownGame(id).into());
             }
-            mutate_game(pool, dir, host, &id, enable_knob(pool, &id, &knob)).await?;
+            owned_mutate(pool, host, dir, &id, || enable_knob(pool, &id, &knob)).await?;
             tracing::info!(game = id.as_str(), knob = knob.as_str(), "knob enabled");
         }
         EnvCmd::Disable { id, knob } => {
@@ -102,7 +102,7 @@ pub(crate) async fn run(
             if !game_exists(pool, &id).await? {
                 return Err(Error::UnknownGame(id).into());
             }
-            mutate_game(pool, dir, host, &id, disable_knob(pool, &id, &knob)).await?;
+            owned_mutate(pool, host, dir, &id, || disable_knob(pool, &id, &knob)).await?;
             tracing::info!(game = id.as_str(), knob = knob.as_str(), "knob disabled");
         }
         EnvCmd::Global { cmd } => {
@@ -131,14 +131,14 @@ pub(crate) async fn run(
                     .split_once('=')
                     .ok_or_else(|| Error::InvalidEnvKey(format!("{pair} (expected KEY=VALUE)")))?;
                 validate_custom_key(key)?;
-                mutate_game(pool, dir, host, &id, set_custom(pool, &id, key, value)).await?;
+                owned_mutate(pool, host, dir, &id, || set_custom(pool, &id, key, value)).await?;
                 tracing::info!(game = id.as_str(), key = key, "custom env set");
             }
             CustomCmd::Remove { id, key } => {
                 if !game_exists(pool, &id).await? {
                     return Err(Error::UnknownGame(id).into());
                 }
-                mutate_game(pool, dir, host, &id, remove_custom(pool, &id, &key)).await?;
+                owned_mutate(pool, host, dir, &id, || remove_custom(pool, &id, &key)).await?;
                 tracing::info!(game = id.as_str(), key = key.as_str(), "custom env removed");
             }
         },

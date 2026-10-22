@@ -16,7 +16,12 @@ pub(crate) async fn enable_mod_cli(
                 confirm_list("foreign game-dir dests", &msg_items(&msg), false)?;
                 yes = true;
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                if on_need_profile(pool, game, &e).await? {
+                    continue;
+                }
+                return Err(e.into());
+            }
         }
     }
 }
@@ -39,7 +44,12 @@ pub(crate) async fn set_file_keep_cli(
                 confirm_list("foreign game-dir dests", &msg_items(&msg), false)?;
                 yes = true;
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                if on_need_profile(pool, game, &e).await? {
+                    continue;
+                }
+                return Err(e.into());
+            }
         }
     }
 }
@@ -59,7 +69,12 @@ pub(crate) async fn set_slot_cli(
                 confirm_list("foreign game-dir dests", &msg_items(&msg), false)?;
                 yes = true;
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                if on_need_profile(pool, game, &e).await? {
+                    continue;
+                }
+                return Err(e.into());
+            }
         }
     }
 }
@@ -82,16 +97,23 @@ pub(crate) async fn uninstall_mod_cli(
                 )?;
                 yes = true;
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                if on_need_profile(pool, game, &e).await? {
+                    continue;
+                }
+                return Err(e.into());
+            }
         }
     }
 }
 
-pub(crate) fn resync_cli(
+pub(crate) async fn resync_cli(
+    pool: &tuxgt_core::SqlitePool,
     game: &str,
     instance: Option<&str>,
     yes: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    confirm_profile_write(pool, game).await?;
     let data = data_dir();
     let clash = tuxgt_core::resync_repick_instances(&data, &config_dir(), game)?;
     if !clash.is_empty() && !yes {

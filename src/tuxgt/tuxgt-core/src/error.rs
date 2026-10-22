@@ -113,6 +113,10 @@ pub enum Error {
     NeedConfirm(String),
     #[error("{0}")]
     NeedSlotChoice(String),
+    /// Unmodded is active and Default already has changes. Not `NeedConfirm`:
+    /// install's yes-retry must not treat this as a dest overwrite.
+    #[error("{0}")]
+    NeedProfile(String),
     /// `slot` is already the effective dest of enabled mod `holder`.
     #[error("{instance}: slot {slot} is used by {holder}")]
     SlotInUse {

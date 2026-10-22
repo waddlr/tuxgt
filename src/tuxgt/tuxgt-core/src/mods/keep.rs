@@ -27,6 +27,7 @@ pub async fn set_file_keep(
             "required dest cannot be omitted: {dest}"
         )));
     }
+    crate::ensure_profile_write(pool, data_dir, game).await?;
     if on && crate::is_install(&m.adapter) && !yes {
         // Settle the foreign-overwrite confirm before anything moves: a
         // refused enable leaves the manifest and staging byte-identical.

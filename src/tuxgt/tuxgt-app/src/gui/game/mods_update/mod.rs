@@ -66,9 +66,12 @@ impl Shell {
         let cell_bg = cell.clone();
         let label_done = label.clone();
         let tried_password = password.is_some();
+        let retry_password = password.clone();
         let password_bg = password;
         let slot_cb = slot.clone();
+        let retry_slot = slot.clone();
         let slot_bg = slot;
+        let retry_adapter = adapter.clone();
         // R12: a redownload is the same transfer as an install — it keeps
         // running after a Hide and vetoes one while work that lives only
         // in this window is unfinished: the download, then the overwrite
@@ -76,6 +79,7 @@ impl Shell {
         // future (see install_mod_ui): a local would drop on return,
         // before the transfer starts.
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_spawn(async move {
@@ -87,6 +91,7 @@ impl Shell {
                         // Foreign game-dir overwrites still come back from
                         // `install_instance` because `yes` stays false.
                         let pool = open_db_shared(&data).await?;
+                        tuxgt_core::ensure_profile_write(&pool, &data, &game).await?;
                         let opts = InstallOpts {
                             adapter,
                             redownload: true,
@@ -166,6 +171,9 @@ impl Shell {
                     Err(Error::ArchivePasswordRequired) => {
                         this.drop_install_live(&done, &inst_cb, cx);
                     }
+                    Err(Error::NeedProfile(_)) => {
+                        this.drop_install_live(&done, &inst_cb, cx);
+                    }
                     Err(e) => {
                         this.finish_install_live(
                             &done,
@@ -182,6 +190,7 @@ impl Shell {
                 }
                 match result {
                     Ok((m, _)) => {
+                        this.note_saved_default(was_unmodded, cx);
                         // Verdict already dropped above, including when the
                         // user left the page. Refresh only while it is showing.
                         this.refresh_mods(&m.game, cx);
@@ -222,6 +231,30 @@ impl Shell {
                             });
                         }
                     }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let game = done.clone();
+                                let instance = inst_cb.clone();
+                                let adapter = retry_adapter.clone();
+                                let password = retry_password.clone();
+                                let slot = retry_slot.clone();
+                                move |this, cx| {
+                                    this.update_mod_ui(
+                                        &game,
+                                        &instance,
+                                        adapter,
+                                        yes,
+                                        force_staging,
+                                        password,
+                                        slot,
+                                        cx,
+                                    );
+                                }
+                            },
+                            cx,
+                        ) => {}
                     Err(Error::NeedSlotChoice(msg)) => {
                         // Forced runs keep the UpdateForce retry, but the
                         // foreign leg is never done: the slot card collects

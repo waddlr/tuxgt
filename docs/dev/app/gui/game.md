@@ -3,7 +3,7 @@
 ## Hero (`gui.game-hero`)
 
 Full-bleed wash in the main pane with a guaranteed minimum height; no bordered hero card; no second cover thumb.
-The overlay content is bottom-anchored — Play row → status row → title last — over a true fade just above the TabBar (no gap between banner and tabs).
+The overlay content is bottom-anchored — Play row → profile row → chips row → title last — over a true fade just above the TabBar (no gap between banner and tabs).
 
 - Wash: **wide art only**. Prefer Steam `library_hero` (then `library_header` /
   `header`) as `header_path`. Width-fill crop-fit. **Never** a
@@ -12,6 +12,7 @@ The overlay content is bottom-anchored — Play row → status row → title las
   from a remote `header_path` URL or SteamGridDB `hero_url` (not grids)
   (`gui.metadata-fetch`). No heavy blur.
 - Overlay, left column (no right column), top to bottom: **Play** row,
+  profile row (`gui.profile`: the active setup, its own row, not a chip),
   chips + **Mods** / **Knobs** pill row, **display name** last (`headline_lg` + 2,
   20 at Default, still following `font_scale`).
   Title paints theme **foreground**; the pills carry solid wells. A true fade

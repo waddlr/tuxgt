@@ -48,6 +48,9 @@ $PREFIX/
     manifests/<instance>.toml
     apply.toml
     backups/
+    profiles.toml                  # active id + profile rows
+    profile-switch.toml            # in-progress switch journal, absent at rest
+    profiles/<id>/                 # parked inactive root (profile.toml, manifests, stage, runtime, ini, knobs.toml with the launch-argument working copy, disabled/)
 ```
 
 Only host files outside PREFIX: `~/.local/bin/tuxgt`, `~/.local/bin/tuxgt-launcher`, `~/.local/share/applications/tuxgt.desktop` (Categories=`Game;`), `~/.local/share/icons/hicolor/<size>/apps/tuxgt.png` (9), `~/.config/tuxgt.conf` (`TUXGT_DATA=<abs PREFIX>`), `~/.config/protonfixes/localfixes/` (file-level compose of `default.py` / `tuxgt.py`; never a dir symlink; wraps a foreign `default.py` to `_tuxgt_wrapped_default.py`). No per-game `.desktop`. To relocate: `mv <PREFIX> <NEW> && <NEW>/bin/tuxgt install`.

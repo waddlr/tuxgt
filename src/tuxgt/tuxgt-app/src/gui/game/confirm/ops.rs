@@ -13,7 +13,19 @@ impl Shell {
             self.pending_confirm,
             Some(PendingConfirm::ClientStop { .. })
         ) {
+            let drop_restore = matches!(
+                self.pending_confirm,
+                Some(PendingConfirm::ClientStop {
+                    op: ClientStopOp::ProfileRestore,
+                    ..
+                })
+            );
             self.clear_pending_confirm();
+            if drop_restore {
+                self.profile_restore_game = None;
+            } else {
+                self.flush_profile_restore(cx);
+            }
             cx.notify();
             return;
         }
@@ -72,6 +84,7 @@ impl Shell {
             self.uninstall_done = 0;
         }
         self.clear_pending_confirm();
+        self.flush_profile_restore(cx);
         cx.notify();
     }
     /// Running-client guard shared by the Launch Mode radio and Enable &

@@ -2,6 +2,7 @@ use gpui_kit::*;
 
 use super::super::{rt_block, ClientStopOp, Shell};
 
+#[derive(Clone)]
 enum ArgOp {
     Set { id: String, value: Option<String> },
     Disable { ids: Vec<String> },
@@ -25,7 +26,9 @@ impl Shell {
         let Some(game) = self.selected.clone() else {
             return;
         };
+        let retry = write.clone();
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -34,6 +37,7 @@ impl Shell {
                         let pool = tuxgt_core::open_db_shared(&tuxgt_core::data_dir()).await?;
                         let host = tuxgt_core::PluginHost::load()?;
                         let dir = tuxgt_core::data_dir();
+                        tuxgt_core::ensure_profile_write(&pool, &dir, &game).await?;
                         match write {
                             ArgOp::Set { id, value } => {
                                 tuxgt_core::set_arg(
@@ -59,9 +63,19 @@ impl Shell {
             let _ = this.update(cx, |this, cx| {
                 match result {
                     Ok(()) => {
+                        this.note_saved_default(was_unmodded, cx);
                         this.reload_game_env(cx);
                         this.reload_launch_state(cx);
                     }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let retry = retry.clone();
+                                move |this, cx| this.write_args(retry, cx)
+                            },
+                            cx,
+                        ) => {}
                     Err(e) => this.status = e.to_string(),
                 }
                 cx.notify();
@@ -128,7 +142,9 @@ impl Shell {
 
     pub(crate) fn discard_args_ui(&mut self, game: &str, cx: &mut Context<Self>) {
         let game = game.to_string();
+        let retry_game = game.clone();
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -136,13 +152,27 @@ impl Shell {
                     rt_block(async {
                         let pool = tuxgt_core::open_db_shared(&tuxgt_core::data_dir()).await?;
                         let host = tuxgt_core::PluginHost::load()?;
-                        tuxgt_core::discard(&pool, &tuxgt_core::data_dir(), &host, &game).await
+                        let dir = tuxgt_core::data_dir();
+                        tuxgt_core::ensure_profile_write(&pool, &dir, &game).await?;
+                        tuxgt_core::discard(&pool, &dir, &host, &game).await
                     })
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 match result {
-                    Ok(()) => this.reload_game_env(cx),
+                    Ok(()) => {
+                        this.note_saved_default(was_unmodded, cx);
+                        this.reload_game_env(cx);
+                    }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let retry_game = retry_game.clone();
+                                move |this, cx| this.discard_args_ui(&retry_game, cx)
+                            },
+                            cx,
+                        ) => {}
                     Err(e) => this.status = e.to_string(),
                 }
                 this.reload_launch_state(cx);

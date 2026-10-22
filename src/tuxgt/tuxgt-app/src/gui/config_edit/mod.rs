@@ -8,9 +8,9 @@ use gpui_kit::component::button::ButtonVariants as _;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::*;
 
-use tuxgt_core::{config_dir, data_dir, is_config_text, FluentArgs};
+use tuxgt_core::{config_dir, data_dir, is_config_text, open_db_shared, FluentArgs};
 
-use super::{widgets, Shell};
+use super::{rt_block, widgets, Shell};
 
 /// Edit level for the inline config card (`gui.mod-config-edit`): the
 /// shared Settings payload vs one game's staged copy. Instance ids are
@@ -146,6 +146,10 @@ impl Shell {
                 return;
             }
         };
+        if let ConfigLevel::Staged { game, .. } = &edit.level {
+            self.save_staged_config(game.clone(), path, text, cx);
+            return;
+        }
         if let Some(parent) = path.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
                 self.status = format!("{e}");
@@ -219,13 +223,61 @@ impl Shell {
                 .detach();
                 cx.notify();
             }
-            ConfigLevel::Staged { game, .. } => {
-                self.config_edit = None;
-                self.config_nav_pending = None;
-                self.refresh_mod_extra(&game, cx, true);
-                cx.notify();
-            }
+            ConfigLevel::Staged { .. } => {}
         }
+    }
+
+    /// Staged saves are per-game profile writes. Refuse creates nothing
+    /// until Add-to-Default is accepted; a silent move to empty Default
+    /// toasts, then the buffer is written.
+    fn save_staged_config(
+        &mut self,
+        game: String,
+        path: PathBuf,
+        text: String,
+        cx: &mut Context<Self>,
+    ) {
+        let was_unmodded = self.active_unmodded();
+        let transfer = self.hide_state.installing();
+        cx.spawn(async move |this, cx| {
+            let _transfer = transfer;
+            let game_bg = game.clone();
+            let result = cx
+                .background_spawn(async move {
+                    rt_block(async {
+                        let pool = open_db_shared(&data_dir()).await?;
+                        tuxgt_core::ensure_profile_write(&pool, &data_dir(), &game_bg).await
+                    })
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                match result {
+                    Ok(()) => {
+                        if let Some(parent) = path.parent() {
+                            if let Err(e) = std::fs::create_dir_all(parent) {
+                                this.status = format!("{e}");
+                                cx.notify();
+                                return;
+                            }
+                        }
+                        if let Err(e) = std::fs::write(&path, text.as_bytes()) {
+                            this.status = format!("{e}");
+                            cx.notify();
+                            return;
+                        }
+                        this.note_saved_default(was_unmodded, cx);
+                        this.config_edit = None;
+                        this.config_nav_pending = None;
+                        this.refresh_mod_extra(&game, cx, true);
+                    }
+                    Err(e)
+                        if this.hold_profile_retry(&e, |this, cx| this.save_config_ui(cx), cx) => {}
+                    Err(e) => this.status = format!("{e}"),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     pub(crate) fn cancel_config_ui(&mut self, cx: &mut Context<Self>) {

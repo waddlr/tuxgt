@@ -103,6 +103,9 @@ pub enum ClientStopOp {
     ApplyMode,
     VanillaMode,
     HookMode,
+    /// Profile switch dropped the last Apply need while the client was running.
+    /// Confirm stops the client and restores launch options. It does not unhook.
+    ProfileRestore,
     EnablePlay {
         hook: bool,
     },

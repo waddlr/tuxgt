@@ -33,7 +33,7 @@ pub(crate) async fn run(
         WrapperCmd::Set { id, wrapper } => {
             find_enabled_wrapper(host, &wrapper)
                 .ok_or_else(|| Error::UnknownWrapper(wrapper.clone()))?;
-            mutate_game(pool, dir, host, &id, set_wrapper(pool, &id, &wrapper)).await?;
+            owned_mutate(pool, host, dir, &id, || set_wrapper(pool, &id, &wrapper)).await?;
             tracing::info!(
                 game = id.as_str(),
                 wrapper = wrapper.as_str(),
@@ -43,7 +43,7 @@ pub(crate) async fn run(
         WrapperCmd::Unset { id, wrapper } => {
             find_enabled_wrapper(host, &wrapper)
                 .ok_or_else(|| Error::UnknownWrapper(wrapper.clone()))?;
-            mutate_game(pool, dir, host, &id, unset_wrapper(pool, &id, &wrapper)).await?;
+            owned_mutate(pool, host, dir, &id, || unset_wrapper(pool, &id, &wrapper)).await?;
             tracing::info!(
                 game = id.as_str(),
                 wrapper = wrapper.as_str(),

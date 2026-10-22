@@ -17,6 +17,7 @@ pub mod modtype;
 mod paths;
 pub mod plugin;
 pub mod prewire;
+pub mod profile;
 pub mod provider;
 pub mod session;
 pub mod stage;
@@ -132,6 +133,11 @@ pub use plugin::registry::{
 };
 pub use plugin::{PluginDesc, PluginEntry, PluginHost, PluginId, FIRST_PARTY};
 pub use prewire::{ensure_game_init, is_dll, managed_ini, prewire_game};
+pub use profile::{
+    activate_default_for_write, create_copy, create_empty, delete_profile, ensure_profile_write,
+    ensure_profiles, preview_switch, rename_profile, switch_profile, DeleteOutcome, Profile,
+    ProfileKind, ProfileSet, SwitchOutcome, SwitchPreview, ADD_TO_DEFAULT, DEFAULT_ID, UNMODDED_ID,
+};
 pub use provider::heroic::heroic_running;
 pub use provider::steam::steam_icon_for_appid;
 pub use provider::{GameProvider, GameRecord, GAME_PROVIDERS};

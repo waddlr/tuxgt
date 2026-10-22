@@ -101,6 +101,7 @@ impl Shell {
         // kill it mid-write. Held inside the future: a local would drop on
         // return, before the op starts.
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -109,6 +110,7 @@ impl Shell {
                         let pool = open_db_shared(&data_dir()).await?;
                         let host = tuxgt_core::PluginHost::load()?;
                         tuxgt_core::mutate_game(&pool, &data_dir(), &host, &owned, async {
+                            tuxgt_core::ensure_profile_write(&pool, &data_dir(), &owned).await?;
                             if on {
                                 tuxgt_core::set_wrapper(&pool, &owned, wrapper).await
                             } else {
@@ -132,6 +134,7 @@ impl Shell {
                 tracing::debug!(action = "toggle-wrapper", game = game.as_str(), outcome);
                 match result {
                     Ok(rows) => {
+                        this.note_saved_default(was_unmodded, cx);
                         this.wrappers = rows.into_boxed_slice();
                         this.session_payload
                             .insert(game.clone(), super::load_payload(&game));
@@ -145,6 +148,15 @@ impl Shell {
                             this.select_launch_mode_ui(LaunchMode::Apply, cx);
                         }
                     }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let game = game.clone();
+                                move |this, cx| this.toggle_wrapper_ui(&game, wrapper, on, cx)
+                            },
+                            cx,
+                        ) => {}
                     Err(e) => this.status = format!("{e}"),
                 }
                 cx.notify();

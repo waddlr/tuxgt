@@ -52,7 +52,7 @@ LaunchSpec:
 
 Hook channel per game (`game_handle.inject`, default off; Launch Mode radio arm). Not a mod. CLI `tuxgt games handle <id> [--on|--off]`; `--on` while Applied restores the trampoline first (mutual exclusion, `apply.md`). An arm nothing needs never persists (`launch.md` auto-restore): `--on` on a game with no preload/env/argv-wrapper/install need is cleared by the same `sync_session`, and the command reports the resulting state (`off`). Automatic Apply restore defers while the owning store client runs; hook-only needs-gone disarm does not (handle is PREFIX-local).
 
-`games/<rel>/tux-protonfixes.conf` rewritten by `sync_session` on handle, knob, custom env, wrapper, and prewire (`rel` is `game_rel`: `{manager}_{store}/{id}` or `{manager}/{id}`). `games/load-correlator.ini` is rewritten then and after exe/prefix override, doctor, scan, and GUI library load:
+`games/<rel>/tux-protonfixes.conf` rewritten by `sync_session` on handle, knob, custom env, wrapper, prewire, and a finished profile switch (`rel` is `game_rel`: `{manager}_{store}/{id}` or `{manager}/{id}`). The conf is the live session for the active profile (`profile.md`). It is not parked with the slot. `games/load-correlator.ini` is rewritten then and after exe/prefix override, doctor, scan, and GUI library load:
 
 ```
 inject=1

@@ -294,6 +294,7 @@ pub async fn ensure_update_baseline(
                 password: None,
                 slot: None,
             };
+            crate::ensure_profile_write(pool, data_dir, game).await?;
             install_instance(pool, data_dir, config_dir, game, instance, &opts, None).await?;
             let status = check_update(data_dir, config_dir, game, instance).await?;
             return Ok(Baseline {

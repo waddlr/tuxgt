@@ -116,8 +116,10 @@ impl Shell {
             self.note_heroic_restart(&id);
         }
         self.clear_game_data();
+        self.reload_profiles(cx);
         self.fetch_for_tab(cx);
         self.clear_pending_confirm();
+        self.flush_profile_restore(cx);
         self.clear_pending_provide();
         self.mods_picker_open = false;
         self.picker_checked.clear();
@@ -192,5 +194,7 @@ impl Shell {
         self.detect_for = None;
         self.override_edit = None;
         self.redetect_confirm = false;
+        self.profiles = None;
+        self.profile_retry = None;
     }
 }

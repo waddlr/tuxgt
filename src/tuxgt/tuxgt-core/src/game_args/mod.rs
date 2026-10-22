@@ -6,7 +6,7 @@ mod harvest;
 mod publish;
 mod rank;
 mod schema;
-mod store;
+pub(crate) mod store;
 mod suppress;
 mod template;
 

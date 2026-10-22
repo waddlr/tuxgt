@@ -81,14 +81,23 @@ async fn baseline_cli(
     yes: bool,
     slot: Option<String>,
 ) -> Result<Baseline, Box<dyn std::error::Error>> {
-    match ensure_update_baseline(pool, &data_dir(), &config_dir(), game, instance).await {
-        Ok(b) => Ok(b),
-        Err(Error::NeedConfirm(msg)) => {
-            confirm_list("foreign game-dir dests", &msg_items(&msg), yes)?;
-            repair_install(pool, game, instance, true, slot).await
+    loop {
+        match ensure_update_baseline(pool, &data_dir(), &config_dir(), game, instance).await {
+            Ok(b) => return Ok(b),
+            Err(Error::NeedConfirm(msg)) => {
+                confirm_list("foreign game-dir dests", &msg_items(&msg), yes)?;
+                return repair_install(pool, game, instance, true, slot).await;
+            }
+            Err(Error::NeedSlotChoice(_)) => {
+                return repair_install(pool, game, instance, yes, slot).await;
+            }
+            Err(e) => {
+                if on_need_profile(pool, game, &e).await? {
+                    continue;
+                }
+                return Err(e.into());
+            }
         }
-        Err(Error::NeedSlotChoice(_)) => repair_install(pool, game, instance, yes, slot).await,
-        Err(e) => Err(e.into()),
     }
 }
 

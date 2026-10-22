@@ -53,57 +53,8 @@ impl Shell {
                         move |_, _, cx| {
                             let key = key.clone();
                             let game_id = game_id.clone();
-                            view.update(cx, |_this, cx| {
-                                let key = key.clone();
-                                let guard = game_id.clone();
-                                let inner = guard.clone();
-                                // A mutation vetoes a Hide like a transfer:
-                                // the stub handoff would kill it mid-write.
-                                // Held inside the future: a local would drop
-                                // on return, before the op starts.
-                                let transfer = _this.hide_state.installing();
-                                cx.spawn(async move |this, cx| {
-                                    let _transfer = transfer;
-                                    let result = cx
-                                        .background_spawn(async move {
-                                            rt_block(async {
-                                                let pool = open_db_shared(&data_dir()).await?;
-                                                let host = tuxgt_core::PluginHost::load()?;
-                                                tuxgt_core::mutate_game(
-                                                    &pool,
-                                                    &data_dir(),
-                                                    &host,
-                                                    &inner,
-                                                    tuxgt_core::remove_custom(&pool, &inner, &key),
-                                                )
-                                                .await?;
-                                                custom_env(&pool, &inner).await
-                                            })
-                                        })
-                                        .await;
-                                    let _ = this.update(cx, |this, cx| {
-                                        if this.selected.as_deref() != Some(guard.as_str()) {
-                                            return;
-                                        }
-                                        match result {
-                                            Ok(rows) => {
-                                                this.custom_count = rows.len();
-                                                if this.env_maps_showing() {
-                                                    this.custom_env = rows.into_boxed_slice();
-                                                }
-                                                this.session_payload.insert(
-                                                    guard.clone(),
-                                                    super::load_payload(&guard),
-                                                );
-                                                this.reload_armed_state(&guard);
-                                                this.reload_launch_state(cx);
-                                            }
-                                            Err(e) => this.status = format!("{e}"),
-                                        }
-                                        cx.notify();
-                                    });
-                                })
-                                .detach();
+                            view.update(cx, |this, cx| {
+                                this.remove_custom_env_ui(&game_id, &key, cx);
                             });
                         }
                     },
@@ -200,11 +151,14 @@ impl Shell {
             key = key.as_str()
         );
         let guard = game.clone();
+        let key_retry = key.clone();
+        let value_retry = value.clone();
         self.custom_env_adding = false;
         // A mutation vetoes a Hide like a transfer: the stub handoff would
         // kill it mid-write. Held inside the future: a local would drop on
         // return, before the op starts.
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -212,13 +166,10 @@ impl Shell {
                     rt_block(async {
                         let pool = open_db_shared(&data_dir()).await?;
                         let host = tuxgt_core::PluginHost::load()?;
-                        tuxgt_core::mutate_game(
-                            &pool,
-                            &data_dir(),
-                            &host,
-                            &game,
-                            set_custom(&pool, &game, &key, &value),
-                        )
+                        tuxgt_core::mutate_game(&pool, &data_dir(), &host, &game, async {
+                            tuxgt_core::ensure_profile_write(&pool, &data_dir(), &game).await?;
+                            set_custom(&pool, &game, &key, &value).await
+                        })
                         .await?;
                         custom_env(&pool, &game).await
                     })
@@ -230,20 +181,90 @@ impl Shell {
                 }
                 match result {
                     Ok(rows) => {
-                        this.custom_count = rows.len();
-                        if this.env_maps_showing() {
-                            this.custom_env = rows.into_boxed_slice();
-                        }
-                        this.session_payload
-                            .insert(guard.clone(), super::load_payload(&guard));
-                        this.reload_armed_state(&guard);
-                        this.reload_launch_state(cx);
+                        this.note_saved_default(was_unmodded, cx);
+                        this.apply_custom_rows(&guard, rows, cx);
                     }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let game = guard.clone();
+                                let raw = format!("{key_retry}={value_retry}");
+                                move |this, cx| this.add_custom_env_ui(&game, &raw, cx)
+                            },
+                            cx,
+                        ) => {}
                     Err(e) => this.status = format!("{e}"),
                 }
                 cx.notify();
             });
         })
         .detach();
+    }
+
+    pub(crate) fn remove_custom_env_ui(&mut self, game: &str, key: &str, cx: &mut Context<Self>) {
+        let game = game.to_string();
+        let key = key.to_string();
+        let guard = game.clone();
+        let key_retry = key.clone();
+        let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
+        cx.spawn(async move |this, cx| {
+            let _transfer = transfer;
+            let result = cx
+                .background_spawn(async move {
+                    rt_block(async {
+                        let pool = open_db_shared(&data_dir()).await?;
+                        let host = tuxgt_core::PluginHost::load()?;
+                        tuxgt_core::mutate_game(&pool, &data_dir(), &host, &game, async {
+                            tuxgt_core::ensure_profile_write(&pool, &data_dir(), &game).await?;
+                            tuxgt_core::remove_custom(&pool, &game, &key).await
+                        })
+                        .await?;
+                        custom_env(&pool, &game).await
+                    })
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if this.selected.as_deref() != Some(guard.as_str()) {
+                    return;
+                }
+                match result {
+                    Ok(rows) => {
+                        this.note_saved_default(was_unmodded, cx);
+                        this.apply_custom_rows(&guard, rows, cx);
+                    }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let game = guard.clone();
+                                let key = key_retry.clone();
+                                move |this, cx| this.remove_custom_env_ui(&game, &key, cx)
+                            },
+                            cx,
+                        ) => {}
+                    Err(e) => this.status = format!("{e}"),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn apply_custom_rows(
+        &mut self,
+        game: &str,
+        rows: Vec<(String, String)>,
+        cx: &mut Context<Self>,
+    ) {
+        self.custom_count = rows.len();
+        if self.env_maps_showing() {
+            self.custom_env = rows.into_boxed_slice();
+        }
+        self.session_payload
+            .insert(game.to_string(), super::load_payload(game));
+        self.reload_armed_state(game);
+        self.reload_launch_state(cx);
     }
 }

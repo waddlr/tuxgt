@@ -103,7 +103,7 @@ game_args_published(game_id TEXT PRIMARY KEY,
                     snapshot TEXT NOT NULL)
 ```
 
-`game_args` is the working copy. `value` is empty for a flag. `game_args_custom.args` is one string, split with `tokenize()` only. `parse_launch_options` is the wrong parser: text left of `%command%` would become wrappers and env. A `%command%` in the custom string is an error. Empty after trim is an error.
+`game_args` and `game_args_custom` are the working copy and move with the active profile, parked in that profile's `knobs.toml`. `game_args_published` stays on the game. `value` is empty for a flag. `game_args_custom.args` is one string, split with `tokenize()` only. `parse_launch_options` is the wrong parser: text left of `%command%` would become wrappers and env. A `%command%` in the custom string is an error. Empty after trim is an error.
 
 `snapshot` is JSON `{ "args": [{ "arg", "value", "enabled" }], "custom": "" }` taken at Save. `tail` is the exact argument string Save wrote, tokens joined by a single space, each passed through `quote_token`. Empty `tail` means the last Save published no arguments.
 

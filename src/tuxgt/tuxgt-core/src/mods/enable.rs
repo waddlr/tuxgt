@@ -18,6 +18,7 @@ pub async fn set_instance_enabled(
     yes: bool,
 ) -> Result<FileManifest> {
     tracing::debug!(game, instance, on, "enable entry");
+    crate::ensure_profile_write(pool, data_dir, game).await?;
     let mut m = crate::need_manifest(data_dir, game, instance)?;
     m.enabled = on;
     // Unified budget gate (both directions), same rule as the file-keep

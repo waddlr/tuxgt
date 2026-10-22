@@ -18,6 +18,12 @@ use super::notice_store::NoticeStore;
 use super::settings::{AppUpdate, AppUpdateLive};
 use super::*;
 
+/// Parked "Add this to Default?" The game page card runs `run` after the
+/// switch to Default. Cancel drops it and writes nothing.
+pub(crate) struct ProfileRetry {
+    pub(crate) run: Box<dyn FnOnce(&mut Shell, &mut Context<Shell>)>,
+}
+
 pub struct Shell {
     pub(crate) strings: Strings,
     pub(crate) nav: Nav,
@@ -70,6 +76,13 @@ pub struct Shell {
     pub(crate) applied: HashMap<String, bool>,
     pub(crate) handle: HashMap<String, bool>,
     pub(crate) session_payload: HashMap<String, bool>,
+    /// Selected game's profiles. `None` until `show_game` finishes loading.
+    pub(crate) profiles: Option<tuxgt_core::ProfileSet>,
+    pub(crate) profile_retry: Option<ProfileRetry>,
+    /// Apply restore still owed after a profile switch. Survives a confirm
+    /// card that was already up, until the client stop runs or the user
+    /// cancels that stop.
+    pub(crate) profile_restore_game: Option<String>,
     pub(crate) pending_note: Option<Note>,
     pub(crate) knobs: Box<[&'static EnvKnob]>,
     /// T24 precomputed knob paint ids by knob id. Rebuilt wherever `knobs`

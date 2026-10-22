@@ -57,10 +57,12 @@ impl Shell {
         tracing::debug!(action = "reorder", game, instances = order.len());
         let game = game.to_string();
         let done = game.clone();
+        let order_retry = order.clone();
         // A mutation vetoes a Hide like a transfer: the stub handoff would
         // kill it mid-write. Held inside the future: a local would drop on
         // return, before the op starts.
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -80,9 +82,20 @@ impl Shell {
                 tracing::debug!(action = "reorder", game = done.as_str(), outcome);
                 match result {
                     Ok(_) => {
+                        this.note_saved_default(was_unmodded, cx);
                         this.refresh_mods(&done, cx);
                         this.status = this.strings.get("gui-status-reordered");
                     }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let game = done.clone();
+                                let order = order_retry.clone();
+                                move |this, cx| this.reorder_ui(&game, order, cx)
+                            },
+                            cx,
+                        ) => {}
                     Err(e) => this.status = format!("{e}"),
                 }
                 cx.notify();
@@ -165,6 +178,7 @@ impl Shell {
         // kill it mid-write. Held inside the future: a local would drop on
         // return, before the op starts.
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -174,6 +188,7 @@ impl Shell {
                         let pool = open_db_shared(&data).await?;
                         let host = tuxgt_core::PluginHost::load()?;
                         tuxgt_core::mutate_game(&pool, &data, &host, &game, async {
+                            tuxgt_core::ensure_profile_write(&pool, &data, &game).await?;
                             set_mod_env_enabled(&data, &game, &instance, &key, on)?;
                             Ok(())
                         })
@@ -199,6 +214,7 @@ impl Shell {
                 );
                 match result {
                     Ok(()) => {
+                        this.note_saved_default(was_unmodded, cx);
                         this.refresh_mods(&done, cx);
                         let mut args = FluentArgs::new();
                         args.set("instance", inst_cb.clone());
@@ -210,6 +226,17 @@ impl Shell {
                         };
                         this.status = this.strings.get_args(key, Some(&args));
                     }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let game = done.clone();
+                                let instance = inst_cb.clone();
+                                let key = key_cb.clone();
+                                move |this, cx| this.toggle_env(&game, &instance, &key, on, cx)
+                            },
+                            cx,
+                        ) => {}
                     Err(e) => this.status = format!("{e}"),
                 }
                 cx.notify();

@@ -32,8 +32,10 @@ mod picker;
 mod picker_tests;
 mod picker_util;
 mod play;
+mod profile;
 mod provide_park;
 mod rows;
+mod slot_change;
 mod slot_choice;
 mod slot_picks;
 mod uninstall;
@@ -55,6 +57,7 @@ pub(crate) use card::*;
 use gpui_kit::assets::IconName as FullIconName;
 use gpui_kit::component::tab::{Tab, TabBar};
 use gpui_kit::component::{v_flex, Icon, IconName, IconNamed, Sizable as _};
+use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use tuxgt_core::FetchProgress;
 
@@ -160,6 +163,9 @@ impl Shell {
             .flex_shrink_0()
             .gap_3()
             .pt_2()
+            .when(self.profile_retry.is_some(), |this| {
+                this.child(self.profile_consent_card(view.clone(), cx))
+            })
             .child(match self.game_tab {
                 GameTab::General => self.general_tab(view.clone(), cx).into_any_element(),
                 GameTab::Mods => self.mods_tab(g.id.as_str(), view.clone(), cx),

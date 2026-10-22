@@ -12,7 +12,7 @@ use tuxgt_core::{data_dir, debug_log_enabled, Strings};
 
 pub(crate) use args::{
     ArgsCustomCmd, CacheCmd, CustomCmd, EnvCmd, ExtraExeCmd, FileAction, FileKeep, GameArgsCmd,
-    GamesCmd, GlobalEnvCmd, InstanceCmd, MintCmd, ModsCmd, WrapperCmd,
+    GamesCmd, GlobalEnvCmd, InstanceCmd, MintCmd, ModsCmd, ProfileCmd, WrapperCmd,
 };
 
 #[derive(Parser)]
@@ -98,6 +98,11 @@ pub(crate) enum Cmd {
     Wrapper {
         #[command(subcommand)]
         cmd: WrapperCmd,
+    },
+    /// Per-game customization profiles
+    Profile {
+        #[command(subcommand)]
+        cmd: ProfileCmd,
     },
     /// Play a game (does not write store config unless Enable & Play / --apply)
     Launch {

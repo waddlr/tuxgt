@@ -136,6 +136,7 @@ pub async fn set_instance_slot(
     slot: &str,
     yes: bool,
 ) -> Result<FileManifest> {
+    crate::ensure_profile_write(pool, data_dir, game).await?;
     rewrite_instance_slot(pool, data_dir, game, instance, slot, yes, true, true).await
 }
 
@@ -331,6 +332,7 @@ pub async fn set_load_order(
     if let Some(id) = ids.difference(&seen).next() {
         return Err(Error::InvalidInstance(format!("missing instance: {id}")));
     }
+    crate::ensure_profile_write(pool, data_dir, game).await?;
     let mut by_id: std::collections::BTreeMap<String, FileManifest> = installed
         .into_iter()
         .map(|m| (m.instance.clone(), m))

@@ -59,15 +59,19 @@ pub(crate) async fn run(
             );
         }
         GameArgsCmd::Set { id, arg, value } => {
+            confirm_profile_write(pool, &id).await?;
             tuxgt_core::set_arg(pool, dir, host, &id, &arg, value.as_deref()).await?;
         }
         GameArgsCmd::Unset { id, arg } => {
+            confirm_profile_write(pool, &id).await?;
             tuxgt_core::unset_arg(pool, dir, host, &id, &arg).await?;
         }
         GameArgsCmd::Enable { id, arg } => {
+            confirm_profile_write(pool, &id).await?;
             tuxgt_core::enable_arg(pool, dir, host, &id, &arg).await?;
         }
         GameArgsCmd::Disable { id, arg } => {
+            confirm_profile_write(pool, &id).await?;
             tuxgt_core::disable_arg(pool, dir, host, &id, &arg).await?;
         }
         GameArgsCmd::Custom { cmd } => match cmd {
@@ -78,9 +82,11 @@ pub(crate) async fn run(
                 }
             }
             crate::ArgsCustomCmd::Set { id, args } => {
+                confirm_profile_write(pool, &id).await?;
                 tuxgt_core::game_args::set_custom(pool, dir, host, &id, &args).await?;
             }
             crate::ArgsCustomCmd::Clear { id } => {
+                confirm_profile_write(pool, &id).await?;
                 tuxgt_core::clear_custom(pool, dir, host, &id).await?;
             }
         },
@@ -101,6 +107,7 @@ pub(crate) async fn run(
             println!("{line}");
         }
         GameArgsCmd::Discard { id } => {
+            confirm_profile_write(pool, &id).await?;
             tuxgt_core::discard(pool, dir, host, &id).await?;
         }
     }

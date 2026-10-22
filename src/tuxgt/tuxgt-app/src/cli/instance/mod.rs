@@ -61,7 +61,7 @@ pub(crate) async fn run(pool: &SqlitePool, cmd: InstanceCmd) -> CliResult {
                 return Err(Error::UnknownGame(game).into());
             }
             check_manifest_instance(&game, &instance)?;
-            let m = set_instance_enabled(pool, &data_dir(), &game, &instance, false, true).await?;
+            let m = mutate::enable_mod_cli(pool, &game, &instance, false, true).await?;
             println!("{}\t{}\tdisabled", m.game, m.instance);
         }
         InstanceCmd::Uninstall {
@@ -126,7 +126,26 @@ pub(crate) async fn run(pool: &SqlitePool, cmd: InstanceCmd) -> CliResult {
                 }
                 check_manifest_instance(&game, &instance)?;
                 let load = matches!(action, Some(FileAction::Loaddll));
-                tuxgt_core::set_file_load(pool, &data_dir(), &game, &instance, &dest, load).await?;
+                loop {
+                    match tuxgt_core::set_file_load(
+                        pool,
+                        &data_dir(),
+                        &game,
+                        &instance,
+                        &dest,
+                        load,
+                    )
+                    .await
+                    {
+                        Ok(_) => break,
+                        Err(e) => {
+                            if on_need_profile(pool, &game, &e).await? {
+                                continue;
+                            }
+                            return Err(e.into());
+                        }
+                    }
+                }
                 let word = if load { "loaddll" } else { "include" };
                 println!("{game}\t{instance}\t{dest}\t{word}");
                 tracing::info!(
@@ -165,8 +184,10 @@ pub(crate) async fn run(pool: &SqlitePool, cmd: InstanceCmd) -> CliResult {
                 check_manifest_instance(&game, &instance)?;
                 let on = matches!(action, FileKeep::Enable);
                 let host = PluginHost::load()?;
+                confirm_profile_write(pool, &game).await?;
                 mutate_game(pool, &data_dir(), &host, &game, async {
-                    set_mod_env_enabled(&data_dir(), &game, &instance, &key, on)
+                    set_mod_env_enabled(&data_dir(), &game, &instance, &key, on)?;
+                    Ok(())
                 })
                 .await?;
                 let word = if on { "enabled" } else { "disabled" };
@@ -202,7 +223,17 @@ pub(crate) async fn run(pool: &SqlitePool, cmd: InstanceCmd) -> CliResult {
             if !game_exists(pool, &game).await? {
                 return Err(Error::UnknownGame(game).into());
             }
-            let ordered = set_load_order(pool, &data_dir(), &game, &instances).await?;
+            let ordered = loop {
+                match set_load_order(pool, &data_dir(), &game, &instances).await {
+                    Ok(ordered) => break ordered,
+                    Err(e) => {
+                        if on_need_profile(pool, &game, &e).await? {
+                            continue;
+                        }
+                        return Err(e.into());
+                    }
+                }
+            };
             for m in &ordered {
                 println!("{game}\t{}\t{}", m.instance, m.load_order);
             }
@@ -254,7 +285,7 @@ pub(crate) async fn run(pool: &SqlitePool, cmd: InstanceCmd) -> CliResult {
             if !game_exists(pool, &game).await? {
                 return Err(Error::UnknownGame(game).into());
             }
-            mutate::resync_cli(&game, instance.as_deref(), yes)?;
+            mutate::resync_cli(pool, &game, instance.as_deref(), yes).await?;
         }
     }
     Ok(())

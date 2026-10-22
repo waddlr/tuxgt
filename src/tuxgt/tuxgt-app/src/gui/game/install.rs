@@ -190,9 +190,12 @@ impl Shell {
         let cell_bg = cell.clone();
         let label_done = label.clone();
         let wr_bg = with_requires.clone();
+        let retry_requires = with_requires.clone();
         let tried_password = password.is_some();
+        let retry_password = password.clone();
         let password_bg = password;
         let slot_cb = slot.clone();
+        let retry_slot = slot.clone();
         let slot_bg = slot;
         // R37: no GUI override. The game's persisted choice is the single
         // source of truth, read by core at install time.
@@ -205,12 +208,14 @@ impl Shell {
         // inside the spawned future: a local here would drop when this
         // function returns, before the transfer even starts.
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_spawn(async move {
                     rt_block(async {
                         let data = data_dir();
                         let pool = open_db_shared(&data).await?;
+                        tuxgt_core::ensure_profile_write(&pool, &data, &game).await?;
                         let opts = InstallOpts {
                             adapter: None,
                             redownload: false,
@@ -294,6 +299,9 @@ impl Shell {
                         // The Provide card is the follow-up; no toast.
                         this.drop_install_live(&done, &inst_cb, cx);
                     }
+                    Err(Error::NeedProfile(_)) => {
+                        this.drop_install_live(&done, &inst_cb, cx);
+                    }
                     Err(e) => {
                         this.finish_install_live(
                             &done,
@@ -320,6 +328,7 @@ impl Shell {
                 };
                 match result {
                     Ok(m) => {
+                        this.note_saved_default(was_unmodded, cx);
                         if mine {
                             this.clear_install_current(&done, &inst_cb);
                         }
@@ -454,6 +463,29 @@ impl Shell {
                             slot_cb,
                         );
                     }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let game = done.clone();
+                                let instance = inst_cb.clone();
+                                let with_requires = retry_requires.clone();
+                                let password = retry_password.clone();
+                                let slot = retry_slot.clone();
+                                move |this, cx| {
+                                    this.install_mod_ui(
+                                        &game,
+                                        &instance,
+                                        with_requires,
+                                        yes,
+                                        password,
+                                        slot,
+                                        cx,
+                                    );
+                                }
+                            },
+                            cx,
+                        ) => {}
                     Err(Error::ArchivePasswordRequired) => {
                         if tried_password {
                             this.pending_note = Some(Note::Warn(

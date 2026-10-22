@@ -30,6 +30,7 @@ pub async fn set_file_load(
     if crate::download::file_is_loaddll(&f.dest, &m.include, f.load) == load {
         return Ok(m);
     }
+    crate::ensure_profile_write(pool, data_dir, game).await?;
     let mut prospective = m;
     if let Some(pf) = prospective.files.iter_mut().find(|f| f.dest == dest) {
         pf.load = crate::download::explicit_file_load(&pf.dest, &prospective.include, load);

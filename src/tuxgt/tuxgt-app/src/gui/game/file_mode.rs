@@ -21,6 +21,7 @@ impl Shell {
         let dest_cb = dest.clone();
         let done = game.clone();
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -49,6 +50,7 @@ impl Shell {
                 );
                 match result {
                     Ok(m) => {
+                        this.note_saved_default(was_unmodded, cx);
                         this.refresh_mods(&m.game, cx);
                         let mut args = FluentArgs::new();
                         args.set("instance", m.instance.clone());
@@ -60,6 +62,19 @@ impl Shell {
                         };
                         this.status = this.strings.get_args(key, Some(&args));
                     }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let game = done.clone();
+                                let instance = inst_cb.clone();
+                                let dest = dest_cb.clone();
+                                move |this, cx| {
+                                    this.set_file_load_ui(&game, &instance, &dest, load, cx)
+                                }
+                            },
+                            cx,
+                        ) => {}
                     Err(e) => {
                         this.refresh_mods(&done, cx);
                         this.status = format!("{e}");

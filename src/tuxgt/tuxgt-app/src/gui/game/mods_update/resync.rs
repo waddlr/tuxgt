@@ -47,6 +47,7 @@ impl Shell {
         // kill it mid-write. Held inside the future: a local would drop on
         // return, before the op starts.
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -58,6 +59,10 @@ impl Shell {
                             return Ok(ResyncStep::Repick(ids));
                         }
                     }
+                    rt_block(async {
+                        let pool = open_db_shared(&data).await?;
+                        tuxgt_core::ensure_profile_write(&pool, &data, &game).await
+                    })?;
                     resync_instance(&data, &game, &instance, true).map(|lines| {
                         ResyncStep::Rows(
                             lines
@@ -73,10 +78,24 @@ impl Shell {
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
-                if this.selected.as_deref() != Some(done.as_str())
-                    || this.nav != Nav::Game
-                    || this.game_tab != GameTab::Mods
-                {
+                if this.selected.as_deref() != Some(done.as_str()) || this.nav != Nav::Game {
+                    return;
+                }
+                if let Err(e) = &result {
+                    if this.hold_profile_retry(
+                        e,
+                        {
+                            let game = done.clone();
+                            let instance = inst_cb.clone();
+                            move |this, cx| this.resync_instance_go(&game, &instance, ask, cx)
+                        },
+                        cx,
+                    ) {
+                        cx.notify();
+                        return;
+                    }
+                }
+                if this.game_tab != GameTab::Mods {
                     return;
                 }
                 let outcome = if result.is_ok() { "resynced" } else { "error" };
@@ -98,6 +117,7 @@ impl Shell {
                         this.status = this.strings.get("gui-note-slot-choice");
                     }
                     Ok(ResyncStep::Rows(rows)) => {
+                        this.note_saved_default(was_unmodded, cx);
                         let count = rows.len();
                         this.merge_stage_rows(&done, rows);
                         // Resync rewrites manifests; arming reads the held field.
@@ -137,6 +157,7 @@ impl Shell {
         // kill it mid-write. Held inside the future: a local would drop on
         // return, before the op starts.
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -148,6 +169,10 @@ impl Shell {
                             return Ok(ResyncStep::Repick(ids));
                         }
                     }
+                    rt_block(async {
+                        let pool = open_db_shared(&data).await?;
+                        tuxgt_core::ensure_profile_write(&pool, &data, &game).await
+                    })?;
                     resync_game(&data, &game, true).map(|lines| {
                         ResyncStep::Rows(
                             lines
@@ -163,10 +188,23 @@ impl Shell {
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
-                if this.selected.as_deref() != Some(done.as_str())
-                    || this.nav != Nav::Game
-                    || this.game_tab != GameTab::Mods
-                {
+                if this.selected.as_deref() != Some(done.as_str()) || this.nav != Nav::Game {
+                    return;
+                }
+                if let Err(e) = &result {
+                    if this.hold_profile_retry(
+                        e,
+                        {
+                            let game = done.clone();
+                            move |this, cx| this.resync_game_go(&game, ask, cx)
+                        },
+                        cx,
+                    ) {
+                        cx.notify();
+                        return;
+                    }
+                }
+                if this.game_tab != GameTab::Mods {
                     return;
                 }
                 let outcome = if result.is_ok() { "resynced" } else { "error" };
@@ -181,6 +219,7 @@ impl Shell {
                         this.status = this.strings.get("gui-note-slot-choice");
                     }
                     Ok(ResyncStep::Rows(rows)) => {
+                        this.note_saved_default(was_unmodded, cx);
                         let count = rows.len();
                         this.bump_mod_extra_epoch(&done);
                         this.mod_stage.insert(done.clone(), rows);
@@ -214,6 +253,7 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         let game_bg = game.clone();
         let picks_park = picks.clone();
         let instance_park = instance.clone();
@@ -239,6 +279,7 @@ impl Shell {
                 }
                 match result {
                     Ok(()) => {
+                        this.note_saved_default(was_unmodded, cx);
                         this.refresh_mods(&game, cx);
                         match &instance {
                             Some(inst) => this.resync_instance_go(&game, inst, false, cx),
@@ -259,6 +300,19 @@ impl Shell {
                         this.status = this.strings.get("gui-note-overwrite-confirm");
                         cx.notify();
                     }
+                    Err(e)
+                        if this.hold_profile_retry(
+                            &e,
+                            {
+                                let game = game.clone();
+                                let instance = instance.clone();
+                                let picks = picks_park.clone();
+                                move |this, cx| {
+                                    this.repick_then_resync(game, instance, picks, yes, cx);
+                                }
+                            },
+                            cx,
+                        ) => {}
                     Err(e) => {
                         this.refresh_mods(&game, cx);
                         this.status = format!("{e}");

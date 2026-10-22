@@ -32,6 +32,7 @@ impl Shell {
         // Held inside the future: a local would drop on return, before the
         // op starts.
         let transfer = self.hide_state.installing();
+        let was_unmodded = self.active_unmodded();
         cx.spawn(async move |this, cx| {
             let _transfer = transfer;
             let result = cx
@@ -46,18 +47,35 @@ impl Shell {
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.mod_update_pending.remove(&key);
-                // Dropped tab or game: the check is stale and the tab
-                // re-checks on entry, so late results are discarded.
-                if !(this.nav == Nav::Game
-                    && this.selected.as_deref() == Some(key.0.as_str())
-                    && this.game_tab == GameTab::Mods)
-                {
+                // Left the game: the check is stale. Still on the game but
+                // off the Mods tab: keep an Add-to-Default card, which the
+                // game page draws on every tab.
+                if !(this.nav == Nav::Game && this.selected.as_deref() == Some(key.0.as_str())) {
+                    cx.notify();
+                    return;
+                }
+                if let Err(e) = &result {
+                    if this.hold_profile_retry(
+                        e,
+                        {
+                            let game = key.0.clone();
+                            let instance = key.1.clone();
+                            move |this, cx| this.spawn_update_check(&game, &instance, cx)
+                        },
+                        cx,
+                    ) {
+                        cx.notify();
+                        return;
+                    }
+                }
+                if this.game_tab != GameTab::Mods {
                     cx.notify();
                     return;
                 }
                 match result {
                     Ok(report) => {
                         if report.installed {
+                            this.note_saved_default(was_unmodded, cx);
                             // The repair install rewrote staging: reload
                             // this instance's rows so the card paints fresh.
                             let rows: Vec<StageRow> = stage_status(&data_dir(), &key.0)
