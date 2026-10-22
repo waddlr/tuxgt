@@ -137,7 +137,7 @@ pub(crate) fn open_new_profile(view: Entity<Shell>, window: &mut Window, cx: &mu
                         "profile-create-cancel",
                         &cancel,
                         false,
-                        { move |window, cx| window.close_dialog(cx) },
+                        move |window, cx| window.close_dialog(cx),
                         cx,
                     )),
             ),
@@ -191,7 +191,7 @@ pub(crate) fn open_rename_profile(view: Entity<Shell>, window: &mut Window, cx: 
                         "profile-rename-cancel",
                         &cancel,
                         false,
-                        { move |window, cx| window.close_dialog(cx) },
+                        move |window, cx| window.close_dialog(cx),
                         cx,
                     )),
             ),
@@ -349,7 +349,7 @@ fn confirm_row(
             "profile-files-no",
             cancel,
             false,
-            { move |window, cx| window.close_dialog(cx) },
+            move |window, cx| window.close_dialog(cx),
             cx,
         ))
 }
