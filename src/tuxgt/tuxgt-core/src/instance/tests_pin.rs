@@ -3,12 +3,12 @@ use super::*;
 use std::fs;
 use std::path::Path;
 
-const RE_68: &str = "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe";
+pub(super) const RE_68: &str = "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe";
 const RE_67: &str = "https://reshade.me/downloads/ReShade_Setup_6.7.0_Addon.exe";
 const OPTI: &str =
     "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/OptiScaler_0.9.4.7z";
 
-fn user_tomls(data: &Path) -> Vec<String> {
+pub(super) fn user_tomls(data: &Path) -> Vec<String> {
     let dir = data.join("mods").join("user");
     let mut names = Vec::new();
     if let Ok(rd) = fs::read_dir(dir) {
@@ -22,7 +22,7 @@ fn user_tomls(data: &Path) -> Vec<String> {
     names
 }
 
-fn write_user(data: &Path, text: &str) {
+pub(super) fn write_user(data: &Path, text: &str) {
     let dir = user_mods_dir(data);
     fs::create_dir_all(&dir).unwrap();
     let id = text
@@ -41,7 +41,7 @@ fn prov(source: &str) -> crate::ModProvenance {
     }
 }
 
-fn seed_payload(data: &Path, official: bool, id: &str, source: &str) {
+pub(super) fn seed_payload(data: &Path, official: bool, id: &str, source: &str) {
     let dir = payload_dir(data, official, None, id);
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("payload.bin"), b"bytes").unwrap();

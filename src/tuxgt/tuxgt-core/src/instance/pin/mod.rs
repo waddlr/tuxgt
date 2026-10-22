@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 
 use super::{
-    export_recipe_text, list_mods, payload_dir, read_payload_provenance, user_mods_dir, Mod,
+    export_recipe_text, list_mods, payload_dir, read_payload_provenance, user_mods_dir, Mod, Plan,
     SourceRef,
 };
 use crate::{Error, Result};
@@ -214,6 +214,14 @@ fn payload_copy_url(parent: &Mod, frozen: &Frozen) -> String {
 
 fn child_mod(parent: &Mod, id: &str, display: &str, frozen: &Frozen) -> Mod {
     let mut child = parent.clone();
+    // `proton_env` is official-only. A user copy that keeps it fails parse.
+    child.plans_allowed = child
+        .plans_allowed
+        .iter()
+        .copied()
+        .filter(|p| *p != Plan::ProtonEnv)
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
     child.id = id.to_string();
     child.label = format!("{} {display}", parent.label);
     child.description = String::new();

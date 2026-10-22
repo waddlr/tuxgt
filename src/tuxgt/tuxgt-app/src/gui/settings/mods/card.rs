@@ -197,7 +197,7 @@ impl Shell {
                         this.child(self.pin_copy_line(&i.pin_labels, cx))
                     })
                     .when(i.pin_of.is_some(), |this| {
-                        let unavailable = i.pin_version.is_none() || !i.payload_present;
+                        let unavailable = i.pin_version.is_none();
                         this.child(self.pin_card_note(i.pin_version.as_deref(), unavailable, cx))
                     })
                     .when(!i.description.is_empty(), |this| {

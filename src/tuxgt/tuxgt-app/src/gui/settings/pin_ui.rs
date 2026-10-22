@@ -42,7 +42,7 @@ impl Shell {
             .into_any_element()
     }
 
-    /// Copy-card sentence. `unavailable` paints the missing-bytes line.
+    /// Copy-card sentence. `unavailable` paints `Pinned version unavailable`.
     pub(crate) fn pin_card_note(
         &self,
         version: Option<&str>,

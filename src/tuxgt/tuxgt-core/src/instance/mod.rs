@@ -73,6 +73,8 @@ mod tests_mint;
 #[cfg(test)]
 mod tests_pin;
 #[cfg(test)]
+mod tests_pin_2;
+#[cfg(test)]
 mod tests_requires;
 #[cfg(test)]
 mod tests_reshade32;
