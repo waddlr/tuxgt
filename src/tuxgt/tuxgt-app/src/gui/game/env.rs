@@ -1,5 +1,5 @@
 use gpui_kit::component::button::ButtonVariants as _;
-use gpui_kit::component::v_flex;
+use gpui_kit::component::{h_flex, v_flex, IconName};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use tuxgt_core::{knob_is_unmanaged, proton_ge_cachy, KnobRow};
@@ -25,6 +25,42 @@ impl Shell {
         view: Entity<Self>,
         cx: &App,
     ) -> impl IntoElement {
+        let (main, advance) = self.env_split(page);
+        let mid = main.len().div_ceil(2).max(1);
+        let (left, right) = main.split_at(mid.min(main.len()));
+        v_flex()
+            .id("env-groups")
+            .gap_3()
+            .child(widgets::cols(
+                "two-col",
+                280.,
+                false,
+                vec![
+                    (
+                        1,
+                        self.env_group_column("env-main-l", "m", left, page, view.clone(), cx)
+                            .into_any_element(),
+                    ),
+                    (
+                        1,
+                        self.env_group_column("env-main-r", "m", right, page, view.clone(), cx)
+                            .into_any_element(),
+                    ),
+                ],
+            ))
+            .when(!advance.is_empty(), |this| {
+                this.child(self.env_advance(advance, page, view, cx))
+            })
+    }
+
+    /// Main and Advance cards. A title can be in both (Mesa mirror, or a split).
+    fn env_split(
+        &self,
+        page: EnvPage,
+    ) -> (
+        Vec<(&'static str, Vec<&'static tuxgt_core::EnvKnob>)>,
+        Vec<(&'static str, Vec<&'static tuxgt_core::EnvKnob>)>,
+    ) {
         const GROUPS: &[(&str, &str)] = &[
             ("gui-knob-dxvk", "dxvk"),
             ("gui-knob-proton", "proton"),
@@ -73,65 +109,128 @@ impl Shell {
                 }
             }
         }
-        let mid = main.len().div_ceil(2).max(1);
-        let (left, right) = main.split_at(mid.min(main.len()));
-        v_flex()
-            .id("env-groups")
-            .gap_3()
-            .child(widgets::cols(
-                "two-col",
-                280.,
-                false,
-                vec![
-                    (
-                        1,
-                        self.env_group_column("env-main-l", left, page, view.clone(), cx)
-                            .into_any_element(),
-                    ),
-                    (
-                        1,
-                        self.env_group_column("env-main-r", right, page, view.clone(), cx)
-                            .into_any_element(),
-                    ),
-                ],
-            ))
-            .when(!advance.is_empty(), |this| {
-                this.child(self.env_advance(advance, page, view, cx))
-            })
+        (main, advance)
     }
 
     pub(crate) fn env_group_column(
         &self,
         id: &'static str,
+        slot: &'static str,
         groups: &[(&'static str, Vec<&'static tuxgt_core::EnvKnob>)],
         page: EnvPage,
         view: Entity<Self>,
         cx: &App,
     ) -> impl IntoElement {
         v_flex().id(id).gap_3().children(
-            groups
-                .iter()
-                .map(|(title, knobs)| self.env_group_box(title, knobs, page, view.clone(), cx)),
+            groups.iter().map(|(title, knobs)| {
+                self.env_group_box(slot, title, knobs, page, view.clone(), cx)
+            }),
         )
     }
 
     pub(crate) fn env_group_box(
         &self,
+        slot: &'static str,
         title: &'static str,
         knobs: &[&'static tuxgt_core::EnvKnob],
         page: EnvPage,
         view: Entity<Self>,
         cx: &App,
     ) -> impl IntoElement {
+        let open = self.env_group_is_open(slot, title, knobs, page);
+        let set_n = knobs.iter().filter(|k| self.knob_is_set(k, page)).count();
+        let summary = if set_n == 0 {
+            self.strings.get("gui-state-unset")
+        } else {
+            let mut fa = tuxgt_core::FluentArgs::new();
+            fa.set("n", set_n.to_string());
+            self.strings.get_args("gui-knob-group-set", Some(&fa))
+        };
         widgets::section_card(title, cx)
             .flex_shrink_0()
-            .child(widgets::section_title(self.strings.get(title), cx))
-            .children(
-                knobs
-                    .iter()
-                    .copied()
-                    .map(|k| self.knob_row(k, page, view.clone(), cx)),
+            .child(
+                h_flex()
+                    .id(SharedString::from(format!("env-grp-{slot}-{title}")))
+                    .w_full()
+                    .justify_between()
+                    .items_center()
+                    .cursor_pointer()
+                    .on_click({
+                        let view = view.clone();
+                        move |_, _, cx| {
+                            view.update(cx, |this, cx| {
+                                let key = Self::env_group_key(page, slot, title);
+                                this.env_group_open.insert(key, !open);
+                                cx.notify();
+                            });
+                        }
+                    })
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .items_center()
+                            .child(widgets::bicon(if open {
+                                IconName::ChevronDown
+                            } else {
+                                IconName::ChevronRight
+                            }))
+                            .child(widgets::section_title(self.strings.get(title), cx)),
+                    )
+                    .child(widgets::muted(summary, cx)),
             )
+            .when(open, |this| {
+                this.children(
+                    knobs
+                        .iter()
+                        .copied()
+                        .map(|k| self.knob_row(k, page, view.clone(), cx)),
+                )
+            })
+    }
+
+    fn env_group_key(page: EnvPage, slot: &str, title: &str) -> String {
+        let page = match page {
+            EnvPage::Game => "g",
+            EnvPage::Global => "s",
+        };
+        format!("{page}:{slot}:{title}")
+    }
+
+    /// Record each card's start-open bit once. A later unset does not collapse it.
+    pub(crate) fn remember_env_groups(&mut self, page: EnvPage) {
+        let (main, advance) = self.env_split(page);
+        self.remember_slot(page, "m", &main);
+        self.remember_slot(page, "a", &advance);
+    }
+
+    fn remember_slot(
+        &mut self,
+        page: EnvPage,
+        slot: &str,
+        groups: &[(&'static str, Vec<&'static tuxgt_core::EnvKnob>)],
+    ) {
+        for (title, knobs) in groups {
+            let key = Self::env_group_key(page, slot, title);
+            if self.env_group_open.contains_key(&key) {
+                continue;
+            }
+            let open = knobs.iter().any(|k| self.knob_is_set(k, page));
+            self.env_group_open.insert(key, open);
+        }
+    }
+
+    fn env_group_is_open(
+        &self,
+        slot: &str,
+        title: &str,
+        knobs: &[&'static tuxgt_core::EnvKnob],
+        page: EnvPage,
+    ) -> bool {
+        let key = Self::env_group_key(page, slot, title);
+        if let Some(open) = self.env_group_open.get(&key) {
+            return *open;
+        }
+        knobs.iter().any(|k| self.knob_is_set(k, page))
     }
 
     pub(crate) fn env_advance(
@@ -178,12 +277,12 @@ impl Shell {
                     vec![
                         (
                             1,
-                            self.env_group_column("env-adv-l", left, page, view.clone(), cx)
+                            self.env_group_column("env-adv-l", "a", left, page, view.clone(), cx)
                                 .into_any_element(),
                         ),
                         (
                             1,
-                            self.env_group_column("env-adv-r", right, page, view, cx)
+                            self.env_group_column("env-adv-r", "a", right, page, view, cx)
                                 .into_any_element(),
                         ),
                     ],

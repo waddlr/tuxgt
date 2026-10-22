@@ -74,16 +74,20 @@ fn find_launcher(data_dir: &Path) -> Result<PathBuf> {
     Err(Error::MissingLauncher)
 }
 
-/// Shell-quote one path for a Steam launch-options fragment.
-pub fn quote_fragment(launcher: &Path) -> String {
-    let s = launcher.to_string_lossy();
+/// Shell-quote one token for a Steam launch-options fragment.
+pub fn quote_token(s: &str) -> String {
     if s.chars()
         .any(|c| c.is_whitespace() || c == '"' || c == '\'')
     {
         format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
     } else {
-        s.into_owned()
+        s.to_string()
     }
+}
+
+/// Shell-quote one path for a Steam launch-options fragment.
+pub fn quote_fragment(launcher: &Path) -> String {
+    quote_token(&launcher.to_string_lossy())
 }
 
 /// One store file Apply touched. `previous` is the fragment Apply replaced:
@@ -235,5 +239,8 @@ pub async fn apply_when_hook_illegal(
 pub fn restore_launch(data_dir: &Path, game_id: &str) -> Result<String> {
     let (provider, _) = provider_for(game_id)?;
     let ctx = apply_ctx(data_dir, game_id)?;
-    provider.restore(&ctx, game_id)
+    let report = provider.restore(&ctx, game_id)?;
+    // The working copy stays. A tail that still composes is dirty again.
+    crate::game_args::clear_published_sync(data_dir, game_id)?;
+    Ok(report)
 }

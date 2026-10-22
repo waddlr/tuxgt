@@ -823,6 +823,8 @@ impl Shell {
             self.strings.get("gui-mode-hook-disabled")
         } else if needs.argv_wrappers {
             self.strings.get("gui-mode-hook-wrappers")
+        } else if needs.args {
+            self.strings.get("gui-mode-hook-args")
         } else if !needs.hook_legal(ge) {
             self.strings.get("gui-mode-hook-install")
         } else {

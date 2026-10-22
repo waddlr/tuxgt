@@ -1,0 +1,3 @@
+Backup suppression list. When the Proton install that will run the game has a gamefix file, that file wins, including when it appends nothing. These annotations are the fallback.
+
+`args-harvest protonfixes` writes `games/*.toml`. Do not hand-edit those files.

@@ -5,8 +5,8 @@ use gpui_kit::component::VirtualListScrollHandle;
 use gpui_kit::*;
 
 use tuxgt_core::{
-    DetectSnapshot, EnvKnob, GameIndexRow, GameRow, GpuCard, HostGpu, HostVerifyEntry, KnobRow,
-    LoadConflict, Strings, ToolStatus, UpdateStatus,
+    ArgView, DetectSnapshot, EnvKnob, GameIndexRow, GameRow, GpuCard, HostGpu, HostVerifyEntry,
+    KnobRow, LoadConflict, Strings, ToolStatus, UpdateStatus,
 };
 
 use super::prefs::Prefs;
@@ -82,7 +82,17 @@ pub struct Shell {
     /// game select and derived from reloaded maps after every env write.
     pub(crate) knob_count: usize,
     pub(crate) custom_count: usize,
+    /// Launch-argument rows for General. Cleared on tab leave.
+    pub(crate) arg_rows: Vec<ArgView>,
+    /// Enabled unsuppressed catalog rows, plus one when custom text is set.
+    pub(crate) arg_count: usize,
+    pub(crate) args_dirty: bool,
+    pub(crate) args_custom: String,
     pub(crate) game_env_advance: bool,
+    /// Knob-group headers the user has opened or closed, keyed by page, main
+    /// or Advance, and title. Cleared when the selected game changes. A
+    /// missing key is filled when that page's rows load.
+    pub(crate) env_group_open: HashMap<String, bool>,
     /// General → Advanced accordion.
     pub(crate) general_advanced: bool,
     pub(crate) settings_env_advance: bool,

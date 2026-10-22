@@ -106,6 +106,8 @@ pub enum ClientStopOp {
     EnablePlay {
         hook: bool,
     },
+    /// Save of game arguments. Confirm stops the client, writes the tail, and restarts.
+    ArgsSave,
     /// R37: an Install-adapter conversion parked on a running client. The
     /// card's Confirm stops the client, runs the transaction with the
     /// consent, and restarts.

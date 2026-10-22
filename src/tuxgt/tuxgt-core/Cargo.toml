@@ -27,3 +27,11 @@ toml.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 unic-langid.workspace = true
+
+[[bin]]
+name = "args-check"
+path = "../tools/args-check/main.rs"
+
+[[bin]]
+name = "args-harvest"
+path = "../tools/args-harvest/main.rs"

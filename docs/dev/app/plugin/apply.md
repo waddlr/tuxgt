@@ -10,6 +10,7 @@ Not in this surface:
 | Store launch-config **read** (options, env, wrapper, Proton pick) | `detector.md` |
 | Game-dir install backups / foreign-DLL confirm | `launch-adapter.md` |
 | 32-bit Play refuse | later |
+| Per-game exe args (`%command%` tail / Heroic `launcherArgs`) | `game-args.md` (`launch.args-delivery`). Apply of the trampoline does not write the arg tail. Save does |
 
 ### Apply (optional, reversible)
 

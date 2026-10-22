@@ -1,0 +1,51 @@
+[engine]
+name = "unity"
+
+[[arg]]
+id = "screen-width"
+kind = "freeform"
+template = "-screen-width={value}"
+help = "Window width."
+
+[[arg]]
+id = "screen-height"
+kind = "freeform"
+template = "-screen-height={value}"
+help = "Window height."
+
+[[arg]]
+id = "screen-fullscreen"
+kind = "enum"
+template = "-screen-fullscreen={value}"
+help = "Fullscreen toggle."
+
+[[arg.value]]
+value = "0"
+help = "Windowed."
+
+[[arg.value]]
+value = "1"
+help = "Fullscreen."
+
+[[arg]]
+id = "force-d3d11"
+template = "-force-d3d11"
+group = "api"
+help = "Force DirectX 11."
+
+[[arg]]
+id = "force-vulkan"
+template = "-force-vulkan"
+group = "api"
+help = "Force Vulkan."
+
+[[arg]]
+id = "force-glcore"
+template = "-force-glcore"
+group = "api"
+help = "Force OpenGL core."
+
+[[arg]]
+id = "nolog"
+template = "-nolog"
+help = "Disable the player log."

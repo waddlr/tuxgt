@@ -1,12 +1,12 @@
 use gpui_kit::component::button::ButtonVariants as _;
-use gpui_kit::component::{h_flex, v_flex, ActiveTheme};
+use gpui_kit::component::{h_flex, v_flex, ActiveTheme, IconName};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use tuxgt_core::FluentArgs;
 
-use super::super::theme::{brand, types, TypeStyled as _};
+use super::super::theme::{brand, hsla_hex, overlay_ink, types, TypeStyled as _};
 use super::super::widgets;
-use super::super::Shell;
+use super::super::{GameTab, Shell};
 
 /// Open a link with the system handler — the same `xdg-open` path as
 /// `widgets::open_btn` (Link), not a new crate (E57).
@@ -146,7 +146,7 @@ impl Shell {
                                     cx,
                                 ))
                             })
-                            .child(self.hero_status(mods_n, knobs_n, cx)),
+                            .child(self.hero_status(mods_n, knobs_n, view.clone(), cx)),
                     )
                     .child(
                         div()
@@ -169,9 +169,15 @@ impl Shell {
 
     /// The mods/knobs pills above the title. Solid pill wells (readable on
     /// any art); a muted pill when unmodified.
-    pub(crate) fn hero_status(&self, mods_n: usize, knobs_n: usize, cx: &App) -> impl IntoElement {
+    pub(crate) fn hero_status(
+        &self,
+        mods_n: usize,
+        knobs_n: usize,
+        view: Entity<Self>,
+        cx: &App,
+    ) -> impl IntoElement {
         let b = cx.theme();
-        if mods_n == 0 && knobs_n == 0 {
+        if mods_n == 0 && knobs_n == 0 && self.arg_count == 0 {
             return widgets::pill(
                 self.strings.get("gui-meta-unmodified"),
                 b.muted_foreground,
@@ -179,6 +185,9 @@ impl Shell {
                 cx,
             )
             .into_any_element();
+        }
+        if mods_n == 0 && knobs_n == 0 {
+            return self.hero_args_pill(view, cx).into_any_element();
         }
         let mut args = FluentArgs::new();
         args.set("count", mods_n.to_string());
@@ -191,6 +200,39 @@ impl Shell {
             .items_center()
             .child(widgets::pill(mods, b.primary, b.border, cx))
             .child(widgets::pill(knobs, b.primary, b.border, cx))
+            .when(self.arg_count > 0, |this| {
+                this.child(self.hero_args_pill(view, cx))
+            })
             .into_any_element()
+    }
+
+    /// `{n} args` opens General, where Launch Arguments lives. It does not write.
+    /// The chevron is the click cue; mods and knobs pills stay plain.
+    fn hero_args_pill(&self, view: Entity<Self>, cx: &App) -> impl IntoElement {
+        let b = cx.theme();
+        let mut fa = FluentArgs::new();
+        fa.set("n", self.arg_count.to_string());
+        let well = widgets::pill_shade(b.primary, cx);
+        div()
+            .id("hero-args")
+            .h(px(18.))
+            .px_1p5()
+            .gap_1()
+            .rounded(px(2.))
+            .border_1()
+            .border_color(b.border)
+            .bg(well)
+            .text_color(overlay_ink(hsla_hex(well)).0)
+            .tx(types(cx).label_sm)
+            .flex()
+            .items_center()
+            .cursor_pointer()
+            .on_click(move |_, _, cx| {
+                view.update(cx, |this, cx| {
+                    this.switch_game_tab(GameTab::General, cx);
+                });
+            })
+            .child(self.strings.get_args("gui-hero-args", Some(&fa)))
+            .child(widgets::bicon(IconName::ChevronRight))
     }
 }

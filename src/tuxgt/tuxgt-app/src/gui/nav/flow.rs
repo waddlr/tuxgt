@@ -64,6 +64,9 @@ impl Shell {
                 if this.game_tab == GameTab::Env && tab != GameTab::Env {
                     this.clear_env_maps();
                 }
+                if this.game_tab == GameTab::General && tab != GameTab::General {
+                    this.clear_arg_rows();
+                }
                 this.game_tab = tab;
                 this.drop_preview_disclosure();
                 this.fetch_for_tab(cx);

@@ -1,0 +1,49 @@
+[engine]
+name = "unreal"
+
+[[arg]]
+id = "windowed"
+template = "-windowed"
+group = "window"
+help = "Run in a window."
+
+[[arg]]
+id = "fullscreen"
+template = "-fullscreen"
+group = "window"
+help = "Run fullscreen."
+
+[[arg]]
+id = "dx11"
+template = "-dx11"
+group = "api"
+help = "Force DirectX 11."
+
+[[arg]]
+id = "dx12"
+template = "-dx12"
+group = "api"
+help = "Force DirectX 12."
+
+[[arg]]
+id = "vulkan"
+template = "-vulkan"
+group = "api"
+help = "Force Vulkan."
+
+[[arg]]
+id = "resx"
+kind = "freeform"
+template = "-ResX={value}"
+help = "Horizontal resolution."
+
+[[arg]]
+id = "resy"
+kind = "freeform"
+template = "-ResY={value}"
+help = "Vertical resolution."
+
+[[arg]]
+id = "log"
+template = "-log"
+help = "Write a game log."

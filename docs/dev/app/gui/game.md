@@ -35,8 +35,10 @@ The overlay content is bottom-anchored — Play row → status row → title las
   - Mods = enabled instances.
   - Knobs = enabled per-game env knobs that are set + custom KEY=VALUE +
     wrappers + detection overrides.
-  - Both 0 → one muted **Unmodified**.
-  - Else `{n} mods` or muted **No Mods**, plus `{n} knobs` or muted **No Knobs**.
+  - Both 0 and no launch args → one muted **Unmodified**.
+  - Both 0 with launch args → only `{n} args` (chevron; click opens General).
+  - Else `{n} mods` or muted **No Mods**, plus `{n} knobs` or muted **No Knobs**,
+    plus `{n} args` beside them when that count is above zero.
   - Active counts: mint. Unmodified / No *: muted body.
 
 **No TARGET chip.** Drop from the hero: manager pill, Hidden, id triple, exe,
@@ -76,8 +78,8 @@ Titlebar: first tab (General) is `{Manager} / {display name}`; other tabs
 append ` / Mods` or ` / Env`. Restart of a game opens General. Legacy
 `view = "prefix"` opens General.
 
-General is two rows then Advanced. Mods is instances. Environment is knobs +
-custom env.
+General is two rows then Advanced. The right stack includes Launch Arguments
+(`gui.game-args`). Mods is instances. Environment is knobs + custom env.
 
 Play is `docs/dev/app/core/launch.md`: Steam/Heroic dispatch to the store client.
 Hook mode → GE/Cachy injects via protonfixes (no Apply). Applied mode →
@@ -89,15 +91,15 @@ Apply still run and add a warning toast pointing at Settings → General.
 
 Lazy fetch, with hero Knobs needing counts on every tab: game select
 loads detection + launch state (wrappers + cached launch config) + metadata
-(`game_show`, not on paint); Env loads the env rows (knobs + custom), every
-other tab loads knob counts only. General also loads extras + AppID. Mods
-fetches mod extra. Env refreshes env.
+(`game_show`, not on paint); General loads argument rows, Env loads the env
+rows (knobs + custom), every other tab loads knob counts only. General also
+loads extras + AppID. Mods fetches mod extra. Env refreshes env.
 
 ## General
 
 Row 1: **About (60%) | right stack (40%)**: **Launch Mode** (store rows
-only), then stacked **Extra wrappers** + **Tools**. No second row. Then
-**Advanced**.
+only), then stacked **Extra wrappers**, **Launch Arguments**, **Tools**.
+No second row. Then **Advanced**.
 
 No page-level diagnostics banner. Do not paint: effective launch preview,
 prefix tree, doctor, snapshots, a separate Identity or Paths card.
@@ -409,8 +411,13 @@ values are exactly `0` and `1` are toggles too: on writes `1`, off writes
 helps. Help is a **tooltip on the
 label**, not a second line: first line = full env var(s), then the help
 (same ink as the key, not muted).
-Hairline between rows. Main
-groups always open; collapsed **Advance** holds other-GPU groups and
+Hairline between rows. Each card is a header with a disclosure chevron. It
+starts open when any knob on that card is set, otherwise closed, and does not
+close itself when the last set knob is cleared. The header shows unset or
+`{n} set` for the knobs on that card. A title in both main and Advance has
+its own header; opening one does not open the other. A click is remembered
+until the selected game changes, including leaving and returning to that game.
+Collapsed **Advance** holds other-GPU groups and
 GE/Cachy-only knobs when this game’s proton is not CachyOS/GE; mesa stays in
 main and mirrors into Advance only on NVIDIA hosts; DX12 sends DXVK to
 Advance while other known APIs send VKD3D there; set/unmanaged stay in main.
@@ -421,6 +428,16 @@ No client-session essay. Optional one line: “Applies on the next Play.”
 Custom environment: **Add KEY=VALUE** sits in the section header (no Plus) and
 opens the inline row; each entry is `KEY=VALUE` + trash; hairline between
 entries; empty “No custom variables.”
+
+## Launch arguments (`gui.game-args`)
+
+Rules: `docs/dev/app/plugin/game-args.md`.
+
+One **Launch Arguments** group on General, in the right stack, above Tools. An ungrouped flag is a switch. An enum is a value menu. Flags that share a `group` are one control (None, then one member). Suppressed rows are a muted **Applied by Proton** list with no switch. Freeform values are read-only here; the tooltip shows the `tuxgt args set` line. Help is a tooltip on the label.
+
+A store row with unsaved edits shows **Save** and **Discard**. Save writes Steam or Heroic and restarts that client once. Toggles do not. The hero pill does not write. Clicking `{n} args` opens General. The pill carries a chevron.
+
+Hero count is enabled unsuppressed args that will compose, plus one when custom text is non-empty. Zero adds no pill. When mods or knobs are shown, a count above zero adds `{n} args` beside them. When both are zero, that pill replaces Unmodified. Suppressed rows are not in the count. General loads the argument rows. Other tabs that load knob counts also load this count.
 
 ## Copy / buttons
 

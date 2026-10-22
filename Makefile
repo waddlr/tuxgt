@@ -109,7 +109,8 @@ prepare: preload build
 		$(PREPARE)/games $(PREPARE)/downloads $(PREPARE)/config \
 		$(PREPARE)/share/applications \
 		$(PREPARE)/share/templates \
-		$(PREPARE)/share/protonfixes
+		$(PREPARE)/share/protonfixes \
+		$(PREPARE)/share/args
 	install -m755 $(BIN_SRC) $(PREPARE)/bin/tuxgt
 	install -m755 src/launcher/tuxgt-launcher $(PREPARE)/bin/tuxgt-launcher
 	install -m755 $(BUILD)/libtuxgt-launcher.so $(PREPARE)/lib/libtuxgt-launcher.so
@@ -123,6 +124,9 @@ prepare: preload build
 	done
 	install -m644 mods/official/*.toml $(PREPARE)/mods/official/
 	install -m644 mods/templates/*.toml $(PREPARE)/share/templates/
+	cp -a args/curated args/protonfixes $(PREPARE)/share/args/
+	if [ -d args/protondb ]; then cp -a args/protondb $(PREPARE)/share/args/; fi
+	find $(PREPARE)/share/args -type f -exec chmod 644 {} +
 	@printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=TuxGT' \
 		'Comment=Linux-native manager for injector/runtime mods' 'Exec=tuxgt' 'Icon=tuxgt' \
 		'Categories=Game;' 'Terminal=false' \

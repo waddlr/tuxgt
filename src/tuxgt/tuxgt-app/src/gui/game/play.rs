@@ -191,10 +191,16 @@ impl Shell {
                                 .await
                                 .map(|_| None)
                         } else {
-                            // E80: Apply clears Handle first, then writes the store.
-                            apply_launch(&pool, &data_dir(), &host, &apply_id)
-                                .await
-                                .map(Some)
+                            let v = tuxgt_core::view(&pool, &data_dir(), &apply_id).await?;
+                            if v.channel && v.dirty {
+                                tuxgt_core::save_args(&pool, &data_dir(), &host, &apply_id)
+                                    .await
+                                    .map(Some)
+                            } else {
+                                apply_launch(&pool, &data_dir(), &host, &apply_id)
+                                    .await
+                                    .map(Some)
+                            }
                         };
                         // The client was stopped on confirm: restart before
                         // reporting, even when the arm failed. Captured as a

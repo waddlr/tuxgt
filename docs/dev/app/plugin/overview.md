@@ -14,6 +14,7 @@ Open **one** surface file. Do not ingest this folder. No external ABI.
 | `download.md` | Downloader + FileManifest |
 | `metadata.md` | `MetadataSource` |
 | `env-knob.md` | `EnvKnob` |
+| `game-args.md` | Per-game executable arguments (`game.args`) |
 | `launch-play.md` | `LaunchSpec` + Play + handle/session |
 | `launch-adapter.md` | LaunchAdapter + prewire |
 | `apply.md` | Apply + harvest |

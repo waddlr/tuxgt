@@ -30,7 +30,12 @@ fn needs_argv_wrappers_force_apply() {
     assert!(n.apply_legal());
     assert!(n.show_radio());
     assert!(!n.hook_preferred(true));
-    let mango = LaunchNeeds::from_state(false, false, false, true);
+    let mango = LaunchNeeds::from_state(false, false, false, true, false);
+    let args = LaunchNeeds::from_state(true, false, false, false, true);
+    assert!(args.args);
+    assert!(!args.hook_legal(true));
+    assert!(args.apply_legal());
+    assert!(!args.install_only);
     assert!(mango.apply_legal());
     assert!(!mango.hook_legal(true));
     assert!(is_argv_wrapper("mangohud"));

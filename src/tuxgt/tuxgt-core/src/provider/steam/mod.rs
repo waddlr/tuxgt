@@ -3,6 +3,7 @@ mod art;
 mod hidden;
 mod provider;
 mod shortcuts;
+mod tail;
 mod vdf;
 
 pub(crate) use apply::*;
@@ -11,6 +12,7 @@ pub(crate) use hidden::*;
 #[cfg(test)]
 pub(crate) use provider::*;
 pub(crate) use shortcuts::*;
+pub(crate) use tail::publish_tail;
 pub(crate) use vdf::*;
 
 pub use art::steam_art;

@@ -12,6 +12,7 @@ Not in this surface (recorded so they are not forgotten):
 | Knob/custom-env merge into `LaunchSpec` | `launch-play.md` |
 | Store `env` JSON snapshot (providers) | `detector.md`; scan refreshes every pass |
 | Help strings in the Fluent catalog | later (static en-US strings for now) |
+| Per-game executable arguments | `game-args.md` (`game.args`). Not a knob |
 
 ### Plugin
 

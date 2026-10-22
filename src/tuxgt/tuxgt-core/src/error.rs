@@ -79,6 +79,16 @@ pub enum Error {
     BadEnv(String),
     #[error("unknown knob: {0}")]
     UnknownKnob(String),
+    #[error("unknown arg: {0}")]
+    UnknownArg(String),
+    #[error("invalid arg value: {0}")]
+    InvalidArgValue(String),
+    #[error("arg suppressed by Proton ({0})")]
+    ArgSuppressed(String),
+    #[error("save and discard are for Steam and Heroic games")]
+    ArgsManualSave,
+    #[error("args: {0}")]
+    Args(String),
     #[error("invalid knob value: {0}")]
     InvalidKnobValue(String),
     #[error("invalid override: {0}")]

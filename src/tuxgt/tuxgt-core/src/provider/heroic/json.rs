@@ -48,11 +48,11 @@ pub(crate) fn launch_snap(root: &Path, app: &str, install_dir: Option<&Path>) ->
             };
         }
     }
+    // Empty launcherArgs is a real value (Save cleared the tail). A missing key stays None.
     snap.launch_options = settings
         .get("launcherArgs")
         .and_then(Value::as_str)
-        .map(|s| s.to_string())
-        .filter(|s| !s.is_empty());
+        .map(|s| s.to_string());
     snap.enable_wow64 = settings
         .get("enableWoW64")
         .and_then(Value::as_bool)

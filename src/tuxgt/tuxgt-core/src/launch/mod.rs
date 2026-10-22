@@ -15,7 +15,7 @@ pub use spec::build_launch_spec;
 pub use types::{game_launch_needs, is_argv_wrapper, LaunchNeeds, LaunchPaths, LaunchSpec};
 
 #[cfg(test)]
-mod testing;
+pub(crate) mod testing;
 #[cfg(test)]
 mod tests_0;
 #[cfg(test)]

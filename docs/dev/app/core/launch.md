@@ -31,7 +31,7 @@ In-game ReShade on that Apply path (install + enable ReShade, restart the client
 
 Handle-on GE/Cachy does **not** need Apply. Apply is for outer argv wrappers, Wine, native, Valve Proton, and `PRESSURE_VESSEL_FILESYSTEMS_RW` if overlay-only `LD_PRELOAD` fails in SLR.
 
-Handle off + Vanilla + a needed channel (preload, env, argv wrappers, or install) → GUI primary **Enable & Play**. Arms **Update Launch Options when Hook is illegal** (argv wrappers, or any enabled install instance), else Hook if GE/Cachy else Update Launch Options, then dispatches; no extra store write on the Hook path. **Apply & Play** is no longer the primary for “I want mods.” Already Hooked or Applied: Play only.
+Handle off + Vanilla + a needed channel (preload, env, argv wrappers, install, or game arguments) → GUI primary **Enable & Play**. Arms **Update Launch Options when Hook is illegal** (argv wrappers, game arguments, or any enabled install instance), else Hook if GE/Cachy else Update Launch Options, then dispatches; no extra store write on the Hook path. When game arguments are dirty, that arm is Save (one confirm, one restart) and then Play. **Apply & Play** is no longer the primary for “I want mods.” Already Hooked or Applied: Play only.
 
 ## Needs (`launch.needs`)
 
@@ -43,9 +43,12 @@ Per enabled instance + per-game env/custom + wrappers. Mixed preload+install is 
 | Preload (no argv wrappers) | yes | yes | legal (paused) |
 | Env without preload (knobs, recipe `[env]`, install/proxy `WINEDLLOVERRIDES`) | yes if no install instance | required when any enabled instance is install | legal (paused) |
 | Install without preload | no | required | legal (paused) |
+| Per-game executable arguments | no | required | legal (paused) |
 | Nothing TuxGT | hidden | hidden | default |
 
-Illegal arm: no-op, control disabled with one reason. Enabling an argv wrapper while Hook is armed auto-switches to Update Launch Options. Any enabled install instance auto-Applies the trampoline (`tuxgt-launcher` in Steam LaunchOptions / Heroic `wrapperOptions`) so store Play runs the session; `preload=1` is absent unless a preload instance is also enabled. Convert Adapter→Preload restores that trampoline.
+Per-game executable arguments are `launch.args-delivery` (`plugin/game-args.md`). `LaunchNeeds.args` is true when any enabled unsuppressed catalog row or non-empty custom token exists. Hook is illegal whenever it is set, including when preload is also on. Toggling an arg does not change Launch Mode and does not restart the client. Save is the store write. While Hook is armed and `args` is on, Hook paints disabled. Save turns Hook off and arms Apply inside that one confirm.
+
+Illegal arm: no-op, control disabled with one reason. Enabling an argv wrapper while Hook is armed auto-switches to Update Launch Options. An arg toggle does not. Any enabled install instance auto-Applies the trampoline (`tuxgt-launcher` in Steam LaunchOptions / Heroic `wrapperOptions`) so store Play runs the session; `preload=1` is absent unless a preload instance is also enabled. Convert Adapter→Preload restores that trampoline.
 
 **Auto-restore:** needs dropping to none while Hook or Update Launch Options is armed (last mod uninstalled, last knob cleared, wrappers off) restores the trampoline and drops the handle in the same write, so the radio repaints Not hooked. Hook-only needs-gone disarm proceeds while the store client runs (handle is PREFIX-local); Apply restore still defers fail-closed until that client is gone, and never half-disarms. An arm nothing needs never persists — `tuxgt games handle <id> --on` on a needs-free game is cleared by that same write and reports `off`. A mode never changes mod/knob management state. Vanilla store Play does not inject env or preload.
 

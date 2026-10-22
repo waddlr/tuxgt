@@ -79,9 +79,7 @@ impl Shell {
         // inside the section).
         let mut right = v_flex().id("general-r1-right").gap_3();
         right = right.child(self.launch_mode_section(view.clone(), cx));
-        right = right
-            .child(self.wrappers_section(&game_id, view.clone(), cx))
-            .child(self.prefix_body(view.clone(), cx));
+        right = right.child(self.general_side(&game_id, view.clone(), cx));
         v_flex()
             .id("general")
             .gap_3()

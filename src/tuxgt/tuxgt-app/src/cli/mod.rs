@@ -1,6 +1,7 @@
 mod cache;
 mod doctor;
 mod env;
+mod game_args;
 mod games;
 mod install;
 mod instance;
@@ -100,6 +101,10 @@ pub async fn run_cli(cmd: Cmd, strings: &Strings) -> CliResult {
                 Cmd::Env { cmd } => {
                     let host = PluginHost::load()?;
                     env::run(&pool, &host, strings, &dir, cmd).await
+                }
+                Cmd::Args { cmd } => {
+                    let host = PluginHost::load()?;
+                    game_args::run(&pool, &host, &dir, cmd).await
                 }
                 Cmd::Wrapper { cmd } => {
                     let host = PluginHost::load()?;

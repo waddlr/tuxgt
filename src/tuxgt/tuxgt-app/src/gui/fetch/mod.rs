@@ -18,12 +18,16 @@ impl Shell {
                 return;
             }
         }
-        self.selected = self
+        let next = self
             .prefs
             .last_game
             .clone()
             .filter(|id| self.index.iter().any(|g| g.id == *id))
             .or_else(|| self.index.first().map(|g| g.id.clone()));
+        if self.selected != next {
+            self.env_group_open.clear();
+        }
+        self.selected = next;
         self.clear_game_data();
         self.prefs.last_game = self.selected.clone();
         self.prefs.save();
@@ -82,6 +86,9 @@ impl Shell {
             self.drop_preview_disclosure();
         }
         tracing::debug!(action = "show-game", game = id.as_str(), tab = ?tab);
+        if self.selected.as_deref() != Some(id.as_str()) {
+            self.env_group_open.clear();
+        }
         self.selected = Some(id.clone());
         self.nav = Nav::Game;
         self.game_tab = tab;
@@ -135,6 +142,18 @@ impl Shell {
         self.nav == Nav::Game && self.game_tab == GameTab::Env
     }
 
+    /// Argument rows are held on General. Late completions refill them only
+    /// while that tab is showing. The hero count stays either way.
+    pub(crate) fn args_showing(&self) -> bool {
+        self.nav == Nav::Game && self.game_tab == GameTab::General
+    }
+
+    pub(crate) fn clear_arg_rows(&mut self) {
+        self.arg_rows.clear();
+        self.args_custom.clear();
+        self.args_dirty = false;
+    }
+
     /// Catalog rows are held on Settings CorePlugins + Mods; late async
     /// completions refill them only while showing (tabs reload on entry).
     pub(crate) fn instances_showing(&self) -> bool {
@@ -151,12 +170,14 @@ impl Shell {
         self.knob_enabled.clear();
         self.custom_env = Default::default();
         self.global_knobs.clear();
+        self.clear_arg_rows();
     }
 
     pub(crate) fn clear_game_data(&mut self) {
         self.clear_env_maps();
         self.knob_count = 0;
         self.custom_count = 0;
+        self.arg_count = 0;
         self.wrappers = Default::default();
         self.launch_needs = Default::default();
         self.launch_cfg = None;

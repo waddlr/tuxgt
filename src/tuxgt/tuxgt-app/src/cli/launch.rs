@@ -97,7 +97,12 @@ async fn enable_and_play(
             set_handle(pool, dir, host, id, true).await?;
             Ok(None::<String>)
         } else {
-            Ok(Some(apply_launch(pool, dir, host, id).await?))
+            let v = tuxgt_core::view(pool, dir, id).await?;
+            if v.channel && v.dirty {
+                Ok(Some(tuxgt_core::save_args(pool, dir, host, id).await?))
+            } else {
+                Ok(Some(apply_launch(pool, dir, host, id).await?))
+            }
         }
     })
     .await?;

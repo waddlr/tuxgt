@@ -168,6 +168,7 @@ pub async fn build_launch_spec(
         }
     };
     runner_args.extend(extra_args);
+    runner_args.extend(crate::game_args::manual_tokens(pool, data_dir, id).await?);
     if let Some(so) = crate::session::find_so_for_game(pool, data_dir, id).await {
         env.insert(
             "TUXGT_LAUNCHER_SO".into(),

@@ -79,16 +79,25 @@ pub struct LaunchNeeds {
     pub argv_wrappers: bool,
     pub install: bool,
     pub install_only: bool,
+    /// Enabled unsuppressed catalog arg, or a non-empty custom token list.
+    pub args: bool,
 }
 
 impl LaunchNeeds {
-    pub fn from_state(preload: bool, install: bool, env: bool, argv_wrappers: bool) -> Self {
+    pub fn from_state(
+        preload: bool,
+        install: bool,
+        env: bool,
+        argv_wrappers: bool,
+        args: bool,
+    ) -> Self {
         Self {
             preload,
             env,
             argv_wrappers,
             install,
-            install_only: install && !preload && !env && !argv_wrappers,
+            install_only: install && !preload && !env && !argv_wrappers && !args,
+            args,
         }
     }
 
@@ -111,12 +120,13 @@ impl LaunchNeeds {
             install,
             has_game_env || mod_env || dll_env,
             argv_wrappers,
+            false,
         )
     }
 
-    /// Preload, env, argv wrappers, or install — Vanilla store Play will not inject.
+    /// Preload, env, argv wrappers, install, or game arguments — Vanilla store Play will not inject.
     pub fn channel_needed(&self) -> bool {
-        self.preload || self.env || self.argv_wrappers || self.install
+        self.preload || self.env || self.argv_wrappers || self.install || self.args
     }
 
     pub fn show_radio(&self) -> bool {
@@ -124,7 +134,10 @@ impl LaunchNeeds {
     }
 
     pub fn hook_legal(&self, ge_cachy: bool) -> bool {
-        ge_cachy && !self.argv_wrappers && (self.preload || (self.env && !self.install))
+        ge_cachy
+            && !self.argv_wrappers
+            && !self.args
+            && (self.preload || (self.env && !self.install))
     }
 
     pub fn apply_legal(&self) -> bool {
@@ -153,11 +166,12 @@ pub async fn game_launch_needs(
         .any(|r| r.enabled && !r.value.is_empty())
         || !custom_env(pool, game_id).await?.is_empty();
     let wrappers = game_wrappers(pool, game_id).await?;
-    Ok(LaunchNeeds::from_manifests(
-        &manifests,
-        has_game_env,
-        &wrappers,
-    ))
+    let mut needs = LaunchNeeds::from_manifests(&manifests, has_game_env, &wrappers);
+    if crate::game_args::args_channel(pool, data_dir, game_id).await? {
+        needs.args = true;
+        needs.install_only = false;
+    }
+    Ok(needs)
 }
 
 #[derive(Clone, Debug)]

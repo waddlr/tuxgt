@@ -53,6 +53,50 @@ pub(crate) enum GlobalEnvCmd {
 }
 
 #[derive(Subcommand)]
+pub(crate) enum GameArgsCmd {
+    /// List catalog rows, or one game's working copy
+    List { id: Option<String> },
+    /// Print one argument row for a game
+    Get { id: String, arg: String },
+    /// Set an argument. Flags take no value.
+    Set {
+        id: String,
+        arg: String,
+        value: Option<String>,
+    },
+    /// Remove a stored argument
+    Unset { id: String, arg: String },
+    /// Enable a stored argument
+    Enable { id: String, arg: String },
+    /// Disable a stored argument (keeps the value)
+    Disable { id: String, arg: String },
+    /// Freeform tokens appended after catalog rows
+    Custom {
+        #[command(subcommand)]
+        cmd: ArgsCustomCmd,
+    },
+    /// Write the composable tail into Steam or Heroic
+    Save {
+        id: String,
+        /// Confirm the store-client stop and restart
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Copy the last Save snapshot back over the working copy
+    Discard { id: String },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ArgsCustomCmd {
+    /// Print the custom argument string
+    List { id: String },
+    /// Replace the custom argument string
+    Set { id: String, args: String },
+    /// Remove the custom argument string
+    Clear { id: String },
+}
+
+#[derive(Subcommand)]
 pub(crate) enum WrapperCmd {
     /// List wrappers (all defs, or one game's on/off state)
     List { id: Option<String> },

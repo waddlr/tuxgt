@@ -191,6 +191,7 @@ impl Shell {
                     ClientStopOp::EnablePlay { hook } => {
                         self.enable_and_play_op_ui(game, hook, true, cx)
                     }
+                    ClientStopOp::ArgsSave => self.save_args_op_ui(game, true, cx),
                     ClientStopOp::AdapterConvert {
                         adapter,
                         slots_chosen,

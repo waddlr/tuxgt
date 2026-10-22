@@ -22,6 +22,7 @@ pub async fn open_db(data_dir: &Path) -> Result<SqlitePool> {
     let pool = SqlitePoolOptions::new().connect_with(opts).await?;
     crate::game::migrate_games(&pool, data_dir).await?;
     crate::env::migrate_env(&pool).await?;
+    crate::game_args::migrate_game_args(&pool).await?;
     crate::session::migrate_handle(&pool).await?;
     crate::session::migrate_extra_exes(&pool).await?;
     crate::metadata::migrate_metadata(&pool).await?;

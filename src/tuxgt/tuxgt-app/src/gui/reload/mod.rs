@@ -23,9 +23,9 @@ impl Shell {
         self.ensure_detection(cx);
         self.reload_launch_state(cx);
         self.reload_metadata(false, cx);
-        // Env rows load on the Env tab; other tabs need just the hero counts.
+        // General loads argument rows; Env loads knob rows; else counts.
         // Mods rows load only on the Mods tab.
-        if self.game_tab == GameTab::Env {
+        if self.game_tab == GameTab::Env || self.game_tab == GameTab::General {
             self.reload_game_env(cx);
         } else {
             self.reload_knob_counts(cx);
@@ -382,8 +382,8 @@ async fn fetch_launch_state(
                     }
                 }
                 "heroic" => {
-                    // Apply writes wrapperOptions (and env), never
-                    // launcherArgs: sync the fields Apply touches.
+                    // Apply writes wrapperOptions and env. Save also writes
+                    // launcherArgs, including an empty string.
                     if let Some(snap) = tuxgt_core::provider::heroic::heroic_live_config(&gid.game)
                     {
                         if snap.launch_options.is_some() {

@@ -11,8 +11,8 @@ use tracing_subscriber::EnvFilter;
 use tuxgt_core::{data_dir, debug_log_enabled, Strings};
 
 pub(crate) use args::{
-    CacheCmd, CustomCmd, EnvCmd, ExtraExeCmd, FileAction, FileKeep, GamesCmd, GlobalEnvCmd,
-    InstanceCmd, MintCmd, ModsCmd, WrapperCmd,
+    ArgsCustomCmd, CacheCmd, CustomCmd, EnvCmd, ExtraExeCmd, FileAction, FileKeep, GameArgsCmd,
+    GamesCmd, GlobalEnvCmd, InstanceCmd, MintCmd, ModsCmd, WrapperCmd,
 };
 
 #[derive(Parser)]
@@ -88,6 +88,11 @@ pub(crate) enum Cmd {
     Env {
         #[command(subcommand)]
         cmd: EnvCmd,
+    },
+    /// Per-game executable arguments
+    Args {
+        #[command(subcommand)]
+        cmd: GameArgsCmd,
     },
     /// Per-game wrappers (gamescope / GameMode / MangoHud)
     Wrapper {

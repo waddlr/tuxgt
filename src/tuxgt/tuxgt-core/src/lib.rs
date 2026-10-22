@@ -7,6 +7,7 @@ pub mod env;
 mod error;
 mod fs;
 pub mod game;
+pub mod game_args;
 pub mod install;
 pub mod instance;
 pub mod launch;
@@ -71,6 +72,12 @@ pub use game::{
     set_game_adapter, set_hidden_override, set_steam_appid, steam_appid_of, touch_last_played,
     validate_adapter, wow64_warn, GameId, GameIndexRow, GameLaunchConfig, GameRow, Wow64Source,
     ADAPTER_INSTALL, ADAPTER_INSTALL_LINKS, ADAPTER_PRELOAD,
+};
+pub use game_args::{
+    arg_count, args_channel, check_tree as check_args_tree, clear_custom, disable_arg, discard,
+    enable_arg, harvest_protonfixes, list_shipped, manual_tokens, migrate_game_args,
+    protondb_has_launch_field, save_args, set_arg, set_custom as set_custom_args, unset_arg, view,
+    ArgKind, ArgMark, ArgValue, ArgView, GameArgsView,
 };
 pub use install::{
     apply_copies, foreign_dest, foreign_occupied, game_root, game_roots, is_prefix_dest,
