@@ -1,13 +1,17 @@
 use std::fs;
 
 use super::store::{self, Snapshot};
-use super::tests_save::{plant, steam_ready, VDF};
+use super::tests_save::{plant, steam_ready, ENGINE, VDF};
 use super::*;
 use crate::apply::{write_record, ApplyFile, ApplyRecord};
 use crate::launch::testing::pool_dir;
 
 #[tokio::test]
 async fn empty_save_does_not_rearm_apply() {
+    // The disarm/restore path is the subject here (the running-client
+    // deferral has its own test below), so pin the owner stopped rather
+    // than inherit the host's Steam.
+    let _stopped = crate::StoreClient::set_running_for_test(crate::StoreClient::Steam, false);
     let (pool, dir, host) = steam_ready().await;
     let id = "steam:steam:814380";
     let prev = "%command% -windowed";
@@ -27,6 +31,129 @@ async fn empty_save_does_not_rearm_apply() {
     let text = fs::read_to_string(dir.join("localconfig.vdf")).unwrap();
     assert!(!text.contains("tuxgt-launcher"), "{text}");
     assert!(text.contains(prev), "{text}");
+    assert!(crate::apply::read_record(&dir, id).unwrap().is_none());
+    let v = view(&pool, &dir, id).await.unwrap();
+    assert!(!v.dirty);
+    assert!(v.tail.is_empty());
+}
+
+#[tokio::test]
+async fn empty_save_while_client_runs_errors_and_stays_dirty() {
+    let (pool, dir, host) = steam_ready().await;
+    let id = "steam:steam:814380";
+    let prev = "%command% -windowed";
+    plant(&dir, Some(prev), VDF);
+    // The first Save is the legitimate stopped-client write.
+    let stopped = crate::StoreClient::set_running_for_test(crate::StoreClient::Steam, false);
+    set_arg(&pool, &dir, &host, id, "log", None).await.unwrap();
+    save_args(&pool, &dir, &host, id).await.unwrap();
+    drop(stopped);
+    // Skip mutate_game so the toggle does not restore before Save.
+    sqlx::query("UPDATE game_args SET enabled = 0 WHERE game_id = ? AND arg = 'log'")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    // Auto-restore defers while the owner runs. The explicit Save must
+    // error instead of publishing the empty tail over the live record
+    // and marking the row clean.
+    let before = fs::read(dir.join("localconfig.vdf")).unwrap();
+    let running = crate::StoreClient::set_running_for_test(crate::StoreClient::Steam, true);
+    let err = save_args(&pool, &dir, &host, id).await.unwrap_err();
+    assert!(err.to_string().contains("Steam is running"), "{err}");
+    drop(running);
+    assert_eq!(fs::read(dir.join("localconfig.vdf")).unwrap(), before);
+    let text = fs::read_to_string(dir.join("localconfig.vdf")).unwrap();
+    assert!(text.contains("tuxgt-launcher"), "{text}");
+    assert!(crate::apply::read_record(&dir, id).unwrap().is_some());
+    assert!(view(&pool, &dir, id).await.unwrap().dirty);
+    assert_eq!(
+        store::published(&pool, id).await.unwrap().unwrap().tail,
+        "-log"
+    );
+    // Once the client stops the same Save restores and lands clean.
+    let _stopped = crate::StoreClient::set_running_for_test(crate::StoreClient::Steam, false);
+    save_args(&pool, &dir, &host, id).await.unwrap();
+    let text = fs::read_to_string(dir.join("localconfig.vdf")).unwrap();
+    assert!(!text.contains("tuxgt-launcher"), "{text}");
+    assert!(text.contains(prev), "{text}");
+    assert!(crate::apply::read_record(&dir, id).unwrap().is_none());
+    assert!(!view(&pool, &dir, id).await.unwrap().dirty);
+}
+
+#[tokio::test]
+async fn heroic_empty_save_restores_the_baseline() {
+    use crate::launch::testing::test_host;
+    use crate::testing::{seed_game, SeedGame};
+
+    let _stopped = crate::StoreClient::set_running_for_test(crate::StoreClient::Heroic, false);
+    let (pool, dir) = pool_dir().await;
+    let eng = dir.join("share/args/curated/engines");
+    fs::create_dir_all(&eng).unwrap();
+    fs::write(eng.join("unreal.toml"), ENGINE).unwrap();
+    fs::create_dir_all(dir.join("bin")).unwrap();
+    fs::write(dir.join("bin/tuxgt-launcher"), b"#!/bin/sh\n").unwrap();
+    let id = "heroic:gog:abc";
+    seed_game(
+        &pool,
+        SeedGame {
+            id,
+            manager: "heroic",
+            store: "gog",
+            game_id: "abc",
+            name: Some("h"),
+            ..Default::default()
+        },
+    )
+    .await;
+    sqlx::query("UPDATE games SET detected_engine = 'unreal' WHERE id = ?")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let cfg = dir.join("abc.json");
+    // Live state is the applied one: Apply appended our launcher entry
+    // to the user's wrapperOptions (snapshotted in `previous` below).
+    fs::write(
+        &cfg,
+        format!(
+            r#"{{"abc":{{"winePrefix":"/p","launcherArgs":"--user","wrapperOptions":[{{"exe":"/wrap"}},{{"exe":"{}","args":""}}]}}}}"#,
+            dir.join("bin/tuxgt-launcher").display()
+        ),
+    )
+    .unwrap();
+    write_record(
+        &dir,
+        &ApplyRecord {
+            game: id.into(),
+            manager: "heroic".into(),
+            launcher: dir.join("bin/tuxgt-launcher").to_string_lossy().into(),
+            applied_at: 1,
+            files: vec![ApplyFile {
+                path: cfg.to_string_lossy().into(),
+                backup: None,
+                previous: Some(
+                    r#"{"wrapperOptions":[{"exe":"/wrap"}],"launcherArgs":"--user"}"#.into(),
+                ),
+            }],
+        },
+    )
+    .unwrap();
+    let host = test_host(&dir);
+    set_arg(&pool, &dir, &host, id, "log", None).await.unwrap();
+    save_args(&pool, &dir, &host, id).await.unwrap();
+    // Skip mutate_game so the toggle does not restore before Save.
+    sqlx::query("UPDATE game_args SET enabled = 0 WHERE game_id = ? AND arg = 'log'")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    save_args(&pool, &dir, &host, id).await.unwrap();
+    let doc: serde_json::Value = serde_json::from_str(&fs::read_to_string(&cfg).unwrap()).unwrap();
+    assert_eq!(doc["abc"]["launcherArgs"].as_str(), Some("--user"));
+    let wrappers = doc["abc"]["wrapperOptions"].as_array().unwrap();
+    assert_eq!(wrappers.len(), 1, "{doc}");
+    assert_eq!(wrappers[0]["exe"].as_str(), Some("/wrap"));
     assert!(crate::apply::read_record(&dir, id).unwrap().is_none());
     let v = view(&pool, &dir, id).await.unwrap();
     assert!(!v.dirty);

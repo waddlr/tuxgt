@@ -8,7 +8,7 @@ use super::compose::view;
 use super::schema::{ArgKind, CatalogArg};
 use super::store::{self, Snapshot};
 use super::suppress::suppressed_for;
-use crate::apply::{apply_ctx, apply_launch, read_record};
+use crate::apply::{apply_ctx, apply_launch, read_record, restore_launch};
 use crate::game::game_row_by_id;
 use crate::session::set_handle;
 use crate::{Error, PluginHost, Result};
@@ -238,10 +238,22 @@ pub async fn save_args(
     let ctx = apply_ctx(data_dir, game_id)?;
     let report = if !needs.channel_needed() {
         if read_record(data_dir, game_id)?.is_some() {
-            publish_store(&ctx, &row.manager, game_id, &tail, &prior)?
-        } else {
-            format!("{game_id} arguments saved")
+            // The disarm inside set_handle left the record standing: the
+            // auto-restore deferred (owner running) or failed. This
+            // explicit Save finishes the teardown or errors. Publishing
+            // the tail here would recompose the trampoline and then mark
+            // the row clean over a live record.
+            if let Some(client) = crate::StoreClient::for_game(game_id) {
+                if client.running() {
+                    return Err(Error::Apply(format!(
+                        "{} is running; nothing written — retry for the stop prompt",
+                        client.name()
+                    )));
+                }
+            }
+            restore_launch(data_dir, game_id)?;
         }
+        format!("{game_id} arguments saved")
     } else {
         if read_record(data_dir, game_id)?.is_none() {
             apply_launch(pool, data_dir, host, game_id).await?;

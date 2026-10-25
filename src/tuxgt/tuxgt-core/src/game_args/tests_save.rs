@@ -7,7 +7,7 @@ use crate::testing::{seed_game, SeedGame};
 
 pub(super) const VDF: &str = "\"UserLocalConfigStore\"\n{\n\t\"Software\"\n\t{\n\t\t\"Valve\"\n\t\t{\n\t\t\t\"Steam\"\n\t\t\t{\n\t\t\t\t\"apps\"\n\t\t\t\t{\n\t\t\t\t\t\"814380\"\n\t\t\t\t\t{\n\t\t\t\t\t\t\"LaunchOptions\"\t\t\"%command% -windowed\"\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n";
 
-const ENGINE: &str = r#"
+pub(super) const ENGINE: &str = r#"
 [engine]
 name = "unreal"
 
