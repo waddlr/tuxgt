@@ -28,7 +28,7 @@ async fn edits_stay_isolated_and_conf_follows_the_active_profile() {
         "[[custom]]\nkey = \"PROFILE_MARK\"\nvalue = \"beta\"\n",
     )
     .unwrap();
-    switch_profile(&fx.pool, &fx.dir, &fx.id, &beta.id, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, &beta.id, true, true, true)
         .await
         .unwrap();
     assert_eq!(
@@ -51,7 +51,7 @@ async fn edits_stay_isolated_and_conf_follows_the_active_profile() {
         std::fs::read(parked.join("disabled/shade/note.txt")).unwrap(),
         b"alpha"
     );
-    switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true, true)
         .await
         .unwrap();
     let conf = std::fs::read_to_string(fx.game_dir.join("tux-protonfixes.conf")).unwrap();
@@ -73,7 +73,7 @@ async fn install_switch_confirms_before_any_write_and_does_not_stop_the_store() 
         .await
         .unwrap();
     plant_slot_install(&fx, &alt.id, "alt", "other.bin", b"new-bytes");
-    let err = switch_profile(&fx.pool, &fx.dir, &fx.id, &alt.id, false, false)
+    let err = switch_profile(&fx.pool, &fx.dir, &fx.id, &alt.id, false, false, false)
         .await
         .unwrap_err();
     match err {
@@ -90,7 +90,7 @@ async fn install_switch_confirms_before_any_write_and_does_not_stop_the_store() 
     );
     assert!(!fx.install.join("other.bin").exists());
     assert!(!fx.game_dir.join("profile-switch.toml").exists());
-    switch_profile(&fx.pool, &fx.dir, &fx.id, &alt.id, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, &alt.id, true, true, true)
         .await
         .unwrap();
     assert!(!fx.install.join("payload.bin").exists());
@@ -124,7 +124,7 @@ async fn unmodded_apply_restore_confirms_and_defers_while_the_client_runs() {
     )
     .unwrap();
     ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
-    let err = switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, false)
+    let err = switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, false, false)
         .await
         .unwrap_err();
     match err {
@@ -137,7 +137,7 @@ async fn unmodded_apply_restore_confirms_and_defers_while_the_client_runs() {
         .await
         .unwrap()
         .is_empty());
-    let done = switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+    let done = switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true, true)
         .await
         .unwrap();
     assert_eq!(done.active, UNMODDED_ID);
@@ -164,7 +164,7 @@ async fn apply_restore_defers_when_the_store_client_is_running() {
         },
     )
     .unwrap();
-    let done = switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+    let done = switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true, true)
         .await
         .unwrap();
     assert_eq!(done.active, UNMODDED_ID);
@@ -219,13 +219,13 @@ async fn hook_arm_is_remembered_across_an_unmodded_roundtrip() {
         .unwrap();
     assert!(crate::game_handle(&fx.pool, &fx.id).await.unwrap());
     ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
-    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true, true)
         .await
         .unwrap();
     assert!(!crate::game_handle(&fx.pool, &fx.id).await.unwrap());
     let memory = std::fs::read_to_string(fx.game_dir.join("launch-memory.toml")).unwrap();
     assert!(memory.contains("hook"), "{memory}");
-    switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true, true)
         .await
         .unwrap();
     assert!(crate::game_handle(&fx.pool, &fx.id).await.unwrap());
@@ -254,7 +254,7 @@ async fn apply_arm_is_remembered_when_a_switch_restores_it() {
     )
     .unwrap();
     ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
-    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true, true)
         .await
         .unwrap();
     assert!(crate::read_record(&fx.dir, &fx.id).unwrap().is_none());
@@ -282,12 +282,12 @@ async fn apply_rearm_defers_while_the_store_client_runs() {
     )
     .unwrap();
     ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
-    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true, true)
         .await
         .unwrap();
     drop(_stopped);
     let _running = StoreClient::set_running_for_test(StoreClient::Steam, true);
-    let done = switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true)
+    let done = switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true, true)
         .await
         .unwrap();
     assert_eq!(done.active, DEFAULT_ID);
@@ -310,13 +310,13 @@ async fn memory_survives_a_switch_between_need_free_profiles() {
         .await
         .unwrap();
     ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
-    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true, true)
         .await
         .unwrap();
     let blank = crate::create_empty(&fx.pool, &fx.dir, &fx.id, "Blank")
         .await
         .unwrap();
-    switch_profile(&fx.pool, &fx.dir, &fx.id, &blank.id, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, &blank.id, true, true, true)
         .await
         .unwrap();
     let memory = std::fs::read_to_string(fx.game_dir.join("launch-memory.toml")).unwrap();
@@ -341,7 +341,7 @@ async fn stale_memory_clears_when_an_arm_is_already_live() {
     let beta = crate::create_copy(&fx.pool, &fx.dir, &fx.id, "Beta", DEFAULT_ID)
         .await
         .unwrap();
-    switch_profile(&fx.pool, &fx.dir, &fx.id, &beta.id, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, &beta.id, true, true, true)
         .await
         .unwrap();
     assert!(crate::game_handle(&fx.pool, &fx.id).await.unwrap());
@@ -361,7 +361,7 @@ async fn illegal_hook_memory_stays_remembered_and_unreadable_memory_is_dropped()
         .await
         .unwrap();
     ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
-    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true, true)
         .await
         .unwrap();
     // The parked Default gains a launch argument: Hook can no longer
@@ -376,7 +376,7 @@ async fn illegal_hook_memory_stays_remembered_and_unreadable_memory_is_dropped()
         format!("args_custom = \"-foo\"\n{text}")
     };
     std::fs::write(&knobs, text).unwrap();
-    switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true, true)
         .await
         .unwrap();
     assert!(!crate::game_handle(&fx.pool, &fx.id).await.unwrap());
@@ -387,7 +387,7 @@ async fn illegal_hook_memory_stays_remembered_and_unreadable_memory_is_dropped()
     let beta = crate::create_copy(&fx.pool, &fx.dir, &fx.id, "Beta", DEFAULT_ID)
         .await
         .unwrap();
-    switch_profile(&fx.pool, &fx.dir, &fx.id, &beta.id, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, &beta.id, true, true, true)
         .await
         .unwrap();
     assert!(!fx.game_dir.join("launch-memory.toml").exists());

@@ -41,21 +41,31 @@ fn memory_path(gdir: &Path) -> std::path::PathBuf {
     gdir.join("launch-memory.toml")
 }
 
-/// A preference file must never be load-bearing: anything unreadable
-/// or unrecognized reads as no memory and is cleared, so a bad file
-/// cannot wedge every later profile open on the switch resume path.
-fn read_memory(gdir: &Path) -> Option<String> {
+fn parse_memory(gdir: &Path) -> Option<String> {
     let path = memory_path(gdir);
     if !path.is_file() {
         return None;
     }
-    let parsed = fs::read_to_string(&path)
+    fs::read_to_string(&path)
         .ok()
         .and_then(|text| toml::from_str::<MemoryFile>(&text).ok())
         .map(|file| file.mode)
-        .filter(|mode| matches!(mode.as_str(), ARM_HOOK | ARM_APPLY));
-    if parsed.is_none() {
-        tracing::warn!(path = %path.display(), "dropping unreadable launch memory");
+        .filter(|mode| matches!(mode.as_str(), ARM_HOOK | ARM_APPLY))
+}
+
+/// Side-effect-free memory read for switch previews, which must not
+/// mutate the game dir before the confirms resolve.
+pub(crate) fn peek_memory(gdir: &Path) -> Option<String> {
+    parse_memory(gdir)
+}
+
+/// A preference file must never be load-bearing: anything unreadable
+/// or unrecognized reads as no memory and is cleared, so a bad file
+/// cannot wedge every later profile open on the switch resume path.
+fn read_memory(gdir: &Path) -> Option<String> {
+    let parsed = parse_memory(gdir);
+    if parsed.is_none() && memory_path(gdir).is_file() {
+        tracing::warn!(path = %memory_path(gdir).display(), "dropping unreadable launch memory");
         clear_memory(gdir);
     }
     parsed

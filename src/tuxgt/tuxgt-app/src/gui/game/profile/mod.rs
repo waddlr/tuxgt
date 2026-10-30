@@ -4,6 +4,7 @@ mod gate;
 mod rearm;
 mod section;
 mod start;
+mod stop;
 
 pub(crate) use start::{default_new_start, NewStart, HERO_BODY};
 
@@ -12,7 +13,7 @@ use gpui_kit::*;
 use tuxgt_core::{data_dir, open_db_shared, preview_switch, switch_profile, FluentArgs};
 
 use super::super::widgets;
-use super::super::{rt_block, Note, Shell};
+use super::super::{rt_block, ClientStopOp, Note, Shell};
 
 impl Shell {
     /// Hero display only: which profile Play will use. Selection lives
@@ -70,7 +71,7 @@ impl Shell {
                 .await;
             let _ = this.update_in(cx, |this, window, cx| match result {
                 Ok(preview) if preview.file_changes.is_empty() && !preview.drops_needs => {
-                    this.switch_go(game, target, name, true, true, cx);
+                    this.switch_go(game, target, name, true, true, false, cx);
                 }
                 Ok(preview) if !preview.file_changes.is_empty() => {
                     dialog::open_files(
@@ -90,6 +91,7 @@ impl Shell {
                                     name.clone(),
                                     true,
                                     false,
+                                    false,
                                     cx,
                                 )
                             }
@@ -108,12 +110,13 @@ impl Shell {
                                 name.clone(),
                                 true,
                                 true,
+                                false,
                                 cx,
                             )
                         }
                     });
                 }
-                Ok(_) => this.switch_go(game, target, name, true, true, cx),
+                Ok(_) => this.switch_go(game, target, name, true, true, false, cx),
                 Err(e) => {
                     this.status = format!("{e}");
                     cx.notify();
@@ -130,6 +133,7 @@ impl Shell {
         name: String,
         yes_files: bool,
         yes_restore: bool,
+        yes_client_stop: bool,
         cx: &mut Context<Self>,
     ) {
         let transfer = self.hide_state.installing();
@@ -148,6 +152,7 @@ impl Shell {
                             &target_bg,
                             yes_files,
                             yes_restore,
+                            yes_client_stop,
                         )
                         .await
                     })
@@ -184,6 +189,7 @@ impl Shell {
                                 name.clone(),
                                 true,
                                 yes_restore,
+                                false,
                                 cx,
                             )
                         }
@@ -203,10 +209,31 @@ impl Shell {
                                 name.clone(),
                                 true,
                                 true,
+                                false,
                                 cx,
                             )
                         }
                     });
+                }
+                Err(tuxgt_core::Error::NeedConfirm(msg))
+                    if msg.starts_with("profile-client-stop:") && !yes_client_stop =>
+                {
+                    let op = ClientStopOp::ProfileSwitch {
+                        target: target.clone(),
+                        name: name.clone(),
+                        yes_files,
+                        yes_restore,
+                    };
+                    if !this.park_client_stop(&game, op, true, cx) {
+                        this.profile_switch_stop_ui(
+                            game.clone(),
+                            target.clone(),
+                            name.clone(),
+                            yes_files,
+                            yes_restore,
+                            cx,
+                        );
+                    }
                 }
                 Err(e) => {
                     this.status = format!("{e}");

@@ -27,7 +27,17 @@ impl Shell {
                     ..
                 })
             );
+            let drop_activate = matches!(
+                self.pending_confirm,
+                Some(PendingConfirm::ClientStop {
+                    op: ClientStopOp::ProfileActivateDefault,
+                    ..
+                })
+            );
             self.clear_pending_confirm();
+            if drop_activate {
+                self.profile_retry = None;
+            }
             if drop_restore {
                 self.profile_restore_game = None;
             } else {

@@ -110,6 +110,27 @@ pub enum ClientStopOp {
     /// Update Launch Options arm, but the client was running. Confirm stops
     /// the client, re-applies, and restarts it.
     ProfileRearm,
+    /// Profile switch predicted to write store launch options while the
+    /// client runs. Confirm stops the client, runs the switch, and
+    /// restarts it; Cancel leaves the switch unstarted.
+    ProfileSwitch {
+        target: String,
+        name: String,
+        yes_files: bool,
+        yes_restore: bool,
+    },
+    /// Active-profile delete predicted to write store launch options
+    /// while the client runs. Confirm stops the client, switches to
+    /// Default and deletes, then restarts it; Cancel deletes nothing.
+    ProfileDelete {
+        name: String,
+        yes_files: bool,
+        yes_restore: bool,
+    },
+    /// Add-to-Default activation predicted to write store launch options
+    /// while the client runs. Confirm stops the client, activates
+    /// Default, restarts it, then runs the parked edit; Cancel drops it.
+    ProfileActivateDefault,
     EnablePlay {
         hook: bool,
     },

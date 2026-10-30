@@ -3,7 +3,7 @@ use tuxgt_core::{
     create_copy, create_empty, data_dir, delete_profile, open_db_shared, rename_profile, DEFAULT_ID,
 };
 
-use super::super::super::{rt_block, Shell};
+use super::super::super::{rt_block, ClientStopOp, Shell};
 use super::dialog::{open_files, open_restore};
 use super::{this_view, NewStart};
 
@@ -74,6 +74,7 @@ impl Shell {
         name: String,
         yes_files: bool,
         yes_restore: bool,
+        yes_client_stop: bool,
         cx: &mut Context<Self>,
     ) {
         let Some(game) = self.selected.clone() else {
@@ -95,6 +96,7 @@ impl Shell {
                             &name_bg,
                             yes_files,
                             yes_restore,
+                            yes_client_stop,
                         )
                         .await
                     })
@@ -128,7 +130,7 @@ impl Shell {
                         .collect();
                     open_files(this_view(cx), this.strings.clone(), window, cx, dests, {
                         let name = name.clone();
-                        move |this, cx| this.delete_go(name.clone(), true, false, cx)
+                        move |this, cx| this.delete_go(name.clone(), true, false, false, cx)
                     });
                 }
                 Err(tuxgt_core::Error::NeedConfirm(msg))
@@ -136,8 +138,26 @@ impl Shell {
                 {
                     open_restore(this_view(cx), this.strings.clone(), window, cx, {
                         let name = name.clone();
-                        move |this, cx| this.delete_go(name.clone(), true, true, cx)
+                        move |this, cx| this.delete_go(name.clone(), true, true, false, cx)
                     });
+                }
+                Err(tuxgt_core::Error::NeedConfirm(msg))
+                    if msg.starts_with("profile-client-stop:") && !yes_client_stop =>
+                {
+                    let op = ClientStopOp::ProfileDelete {
+                        name: name.clone(),
+                        yes_files,
+                        yes_restore,
+                    };
+                    if !this.park_client_stop(&game, op, true, cx) {
+                        this.profile_delete_stop_ui(
+                            game.clone(),
+                            name.clone(),
+                            yes_files,
+                            yes_restore,
+                            cx,
+                        );
+                    }
                 }
                 Err(e) => {
                     this.status = format!("{e}");

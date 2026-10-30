@@ -102,9 +102,9 @@ pub fn join_tail(tokens: &[String]) -> String {
 }
 
 pub(crate) struct Built {
-    rows: Vec<ArgView>,
-    tokens: Vec<String>,
-    channel: bool,
+    pub(crate) rows: Vec<ArgView>,
+    pub(crate) tokens: Vec<String>,
+    pub(crate) channel: bool,
 }
 
 pub(crate) fn compose(
@@ -284,15 +284,6 @@ pub async fn arg_count(pool: &SqlitePool, data_dir: &Path, game_id: &str) -> Res
         .filter(|r| r.enabled && r.mark != ArgMark::Suppressed)
         .count()
         + usize::from(!custom.trim().is_empty()))
-}
-
-pub async fn args_channel(pool: &SqlitePool, data_dir: &Path, game_id: &str) -> Result<bool> {
-    let stored = store::stored_args(pool, game_id).await?;
-    let custom = store::custom_text(pool, game_id).await?;
-    if stored.iter().all(|s| !s.enabled) && custom.trim().is_empty() {
-        return Ok(false);
-    }
-    Ok(view(pool, data_dir, game_id).await?.channel)
 }
 
 /// Raw argv tokens for a manual `LaunchSpec`. Store rows return an empty list.

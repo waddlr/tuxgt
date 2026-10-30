@@ -16,6 +16,8 @@ mod tests_gate;
 #[cfg(test)]
 mod tests_migrate;
 #[cfg(test)]
+mod tests_stop;
+#[cfg(test)]
 mod tests_support;
 #[cfg(test)]
 mod tests_switch;
@@ -274,6 +276,7 @@ pub async fn delete_profile(
     name: &str,
     yes_files: bool,
     yes_restore: bool,
+    yes_client_stop: bool,
 ) -> Result<DeleteOutcome> {
     let set = ensure_profiles(pool, data_dir, game_id).await?;
     let profile = set
@@ -286,8 +289,16 @@ pub async fn delete_profile(
         ));
     }
     let (restore_deferred, rearm_deferred) = if set.active == profile.id {
-        let out =
-            switch_profile(pool, data_dir, game_id, DEFAULT_ID, yes_files, yes_restore).await?;
+        let out = switch_profile(
+            pool,
+            data_dir,
+            game_id,
+            DEFAULT_ID,
+            yes_files,
+            yes_restore,
+            yes_client_stop,
+        )
+        .await?;
         (out.restore_deferred, out.rearm_deferred)
     } else {
         (false, false)

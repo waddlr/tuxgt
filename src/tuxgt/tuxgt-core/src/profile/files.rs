@@ -46,7 +46,7 @@ fn dest_map(manifests: &[FileManifest]) -> BTreeMap<String, String> {
     out
 }
 
-pub(crate) fn channel_needed(manifests: &[FileManifest], knobs: &KnobFile) -> bool {
+pub(crate) fn launch_needs(manifests: &[FileManifest], knobs: &KnobFile) -> LaunchNeeds {
     let has_env = knobs
         .knobs
         .iter()
@@ -57,7 +57,7 @@ pub(crate) fn channel_needed(manifests: &[FileManifest], knobs: &KnobFile) -> bo
         needs.args = true;
         needs.install_only = false;
     }
-    needs.channel_needed()
+    needs
 }
 
 pub(crate) async fn remove_outgoing(

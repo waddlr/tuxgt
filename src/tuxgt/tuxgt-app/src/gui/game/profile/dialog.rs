@@ -232,7 +232,9 @@ pub(crate) fn open_delete_profile(view: Entity<Shell>, window: &mut Window, cx: 
                         move |window, cx| {
                             let name = name.clone();
                             window.close_dialog(cx);
-                            view.update(cx, |this, cx| this.delete_go(name, false, false, cx));
+                            view.update(cx, |this, cx| {
+                                this.delete_go(name, false, false, false, cx)
+                            });
                         }
                     },
                     cx,

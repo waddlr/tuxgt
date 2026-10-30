@@ -78,7 +78,7 @@ async fn arg_row_migrates_to_default_and_parks_on_switch() {
     let other = create_empty(&fx.pool, &fx.dir, &fx.id, "Other")
         .await
         .unwrap();
-    switch_profile(&fx.pool, &fx.dir, &fx.id, &other.id, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, &other.id, true, true, true)
         .await
         .unwrap();
     assert!(store::stored_args(&fx.pool, &fx.id)
@@ -93,7 +93,7 @@ async fn arg_row_migrates_to_default_and_parks_on_switch() {
             .tail,
         "-windowed"
     );
-    switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true)
+    switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true, true)
         .await
         .unwrap();
     let rows = store::stored_args(&fx.pool, &fx.id).await.unwrap();
@@ -147,7 +147,7 @@ fn parked_args_need_a_channel_only_when_they_would_launch() {
         }],
         ..KnobFile::default()
     };
-    assert!(super::files::channel_needed(&[], &on));
+    assert!(super::files::launch_needs(&[], &on).channel_needed());
     let off = KnobFile {
         args: vec![StoredArg {
             arg: "-windowed".into(),
@@ -156,15 +156,15 @@ fn parked_args_need_a_channel_only_when_they_would_launch() {
         }],
         ..KnobFile::default()
     };
-    assert!(!super::files::channel_needed(&[], &off));
+    assert!(!super::files::launch_needs(&[], &off).channel_needed());
     let custom = KnobFile {
         args_custom: " -novid ".into(),
         ..KnobFile::default()
     };
-    assert!(super::files::channel_needed(&[], &custom));
+    assert!(super::files::launch_needs(&[], &custom).channel_needed());
     let blank = KnobFile {
         args_custom: "  ".into(),
         ..KnobFile::default()
     };
-    assert!(!super::files::channel_needed(&[], &blank));
+    assert!(!super::files::launch_needs(&[], &blank).channel_needed());
 }

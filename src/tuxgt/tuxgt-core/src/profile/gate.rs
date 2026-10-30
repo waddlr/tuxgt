@@ -22,7 +22,7 @@ pub async fn ensure_profile_write(pool: &SqlitePool, data_dir: &Path, game_id: &
     let gdir = game_root_dir(data_dir, game_id)?;
     let slot = super::slot_dir(&gdir, DEFAULT_ID)?;
     if slot::slot_is_empty(&slot)? {
-        switch_profile(pool, data_dir, game_id, DEFAULT_ID, true, true).await?;
+        switch_profile(pool, data_dir, game_id, DEFAULT_ID, true, true, false).await?;
         return Ok(());
     }
     Err(Error::NeedProfile(ADD_TO_DEFAULT.into()))
@@ -32,6 +32,16 @@ pub async fn activate_default_for_write(
     pool: &SqlitePool,
     data_dir: &Path,
     game_id: &str,
+    yes_client_stop: bool,
 ) -> Result<SwitchOutcome> {
-    switch_profile(pool, data_dir, game_id, DEFAULT_ID, true, true).await
+    switch_profile(
+        pool,
+        data_dir,
+        game_id,
+        DEFAULT_ID,
+        true,
+        true,
+        yes_client_stop,
+    )
+    .await
 }

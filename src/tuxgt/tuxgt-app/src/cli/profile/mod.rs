@@ -1,11 +1,16 @@
 use std::io::{self, IsTerminal};
 use std::path::Path;
 
+mod finish;
+
 use super::store_write::with_store_write;
 use super::*;
 
+use finish::finish_deferred;
+
 const FILES_MARK: &str = "profile-files:";
 const RESTORE_MARK: &str = "profile-restore:";
+const CLIENT_STOP_MARK: &str = "profile-client-stop:";
 
 pub(crate) async fn run(pool: &SqlitePool, dir: &Path, cmd: ProfileCmd) -> CliResult {
     match cmd {
@@ -40,15 +45,30 @@ async fn use_profile(pool: &SqlitePool, dir: &Path, id: &str, name: &str, yes: b
     let profile_id = profile_id(pool, dir, id, name).await?;
     let mut yes_files = yes;
     let mut yes_restore = yes;
+    let mut yes_client_stop = false;
     loop {
-        match switch_profile(pool, dir, id, &profile_id, yes_files, yes_restore).await {
+        if yes_client_stop {
+            let out = with_store_write(id, yes, true, || async {
+                Ok(
+                    switch_profile(pool, dir, id, &profile_id, yes_files, yes_restore, true)
+                        .await?,
+                )
+            })
+            .await?;
+            finish_deferred(pool, dir, id, yes, out.restore_deferred, out.rearm_deferred).await?;
+            println!("{name}");
+            return Ok(());
+        }
+        match switch_profile(pool, dir, id, &profile_id, yes_files, yes_restore, false).await {
             Ok(out) => {
-                finish_restore(pool, dir, id, yes, out.restore_deferred).await?;
-                finish_rearm(pool, dir, id, yes, out.rearm_deferred).await?;
+                finish_deferred(pool, dir, id, yes, out.restore_deferred, out.rearm_deferred)
+                    .await?;
                 println!("{name}");
                 return Ok(());
             }
-            Err(e) => accept_switch_confirm(&e, &mut yes_files, &mut yes_restore)?,
+            Err(e) => {
+                accept_switch_confirm(&e, &mut yes_files, &mut yes_restore, &mut yes_client_stop)?
+            }
         }
     }
 }
@@ -86,15 +106,27 @@ async fn remove(pool: &SqlitePool, dir: &Path, id: &str, name: &str, yes: bool) 
     refuse_headless(yes)?;
     let mut yes_files = yes;
     let mut yes_restore = yes;
+    let mut yes_client_stop = false;
     loop {
-        match delete_profile(pool, dir, id, name, yes_files, yes_restore).await {
+        if yes_client_stop {
+            let out = with_store_write(id, yes, true, || async {
+                Ok(delete_profile(pool, dir, id, name, yes_files, yes_restore, true).await?)
+            })
+            .await?;
+            finish_deferred(pool, dir, id, yes, out.restore_deferred, out.rearm_deferred).await?;
+            println!("{name}");
+            return Ok(());
+        }
+        match delete_profile(pool, dir, id, name, yes_files, yes_restore, false).await {
             Ok(out) => {
-                finish_restore(pool, dir, id, yes, out.restore_deferred).await?;
-                finish_rearm(pool, dir, id, yes, out.rearm_deferred).await?;
+                finish_deferred(pool, dir, id, yes, out.restore_deferred, out.rearm_deferred)
+                    .await?;
                 println!("{name}");
                 return Ok(());
             }
-            Err(e) => accept_switch_confirm(&e, &mut yes_files, &mut yes_restore)?,
+            Err(e) => {
+                accept_switch_confirm(&e, &mut yes_files, &mut yes_restore, &mut yes_client_stop)?
+            }
         }
     }
 }
@@ -112,7 +144,12 @@ fn profile_mutate_allowed(yes: bool, interactive: bool) -> bool {
     yes || interactive
 }
 
-fn accept_switch_confirm(err: &Error, yes_files: &mut bool, yes_restore: &mut bool) -> CliResult {
+fn accept_switch_confirm(
+    err: &Error,
+    yes_files: &mut bool,
+    yes_restore: &mut bool,
+    yes_client_stop: &mut bool,
+) -> CliResult {
     match err {
         Error::NeedConfirm(msg) if msg.starts_with(FILES_MARK) && !*yes_files => {
             confirm_list("profile-files", &msg_items(msg), false)?;
@@ -124,50 +161,14 @@ fn accept_switch_confirm(err: &Error, yes_files: &mut bool, yes_restore: &mut bo
             *yes_restore = true;
             Ok(())
         }
+        // Next pass runs the switch inside `with_store_write`, which
+        // prompts for the stop; denying it aborts before any write.
+        Error::NeedConfirm(msg) if msg.starts_with(CLIENT_STOP_MARK) && !*yes_client_stop => {
+            *yes_client_stop = true;
+            Ok(())
+        }
         other => Err(other.to_string().into()),
     }
-}
-
-async fn finish_restore(
-    pool: &SqlitePool,
-    dir: &Path,
-    id: &str,
-    yes: bool,
-    restore_deferred: bool,
-) -> CliResult {
-    if !restore_deferred {
-        return Ok(());
-    }
-    let line = with_store_write(id, yes, true, || async { Ok(restore_launch(dir, id)?) }).await?;
-    println!("{line}");
-    let host = PluginHost::load()?;
-    sync_session(pool, dir, &host, id).await?;
-    Ok(())
-}
-
-/// Mirror of `finish_restore` for the remembered Apply arm: the switch
-/// deferred the re-apply because the store client was running.
-async fn finish_rearm(
-    pool: &SqlitePool,
-    dir: &Path,
-    id: &str,
-    yes: bool,
-    rearm_deferred: bool,
-) -> CliResult {
-    if !rearm_deferred {
-        return Ok(());
-    }
-    let host = PluginHost::load()?;
-    let line = with_store_write(id, yes, true, || async {
-        Ok(rearm_remembered_launch(pool, dir, &host, id)
-            .await?
-            .unwrap_or_default())
-    })
-    .await?;
-    if !line.is_empty() {
-        println!("{line}");
-    }
-    Ok(())
 }
 
 async fn profile_id(pool: &SqlitePool, dir: &Path, id: &str, name: &str) -> Result<String, Error> {
@@ -220,9 +221,25 @@ pub(crate) async fn on_need_profile(
 
 async fn accept_default(pool: &SqlitePool, game: &str, msg: &str) -> CliResult {
     confirm_add_default(msg, io::stdin().is_terminal())?;
-    let out = activate_default_for_write(pool, &data_dir(), game).await?;
-    finish_restore(pool, &data_dir(), game, false, out.restore_deferred).await?;
-    finish_rearm(pool, &data_dir(), game, false, out.rearm_deferred).await?;
+    let out = match activate_default_for_write(pool, &data_dir(), game, false).await {
+        Ok(out) => out,
+        Err(Error::NeedConfirm(msg)) if msg.starts_with(CLIENT_STOP_MARK) => {
+            with_store_write(game, false, true, || async {
+                Ok(activate_default_for_write(pool, &data_dir(), game, true).await?)
+            })
+            .await?
+        }
+        Err(e) => return Err(e.into()),
+    };
+    finish_deferred(
+        pool,
+        &data_dir(),
+        game,
+        false,
+        out.restore_deferred,
+        out.rearm_deferred,
+    )
+    .await?;
     Ok(())
 }
 

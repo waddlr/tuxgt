@@ -190,6 +190,20 @@ impl Shell {
                     }
                     ClientStopOp::ProfileRestore => self.profile_restore_ui(game, cx),
                     ClientStopOp::ProfileRearm => self.profile_rearm_ui(game, cx),
+                    ClientStopOp::ProfileSwitch {
+                        target,
+                        name,
+                        yes_files,
+                        yes_restore,
+                    } => {
+                        self.profile_switch_stop_ui(game, target, name, yes_files, yes_restore, cx)
+                    }
+                    ClientStopOp::ProfileDelete {
+                        name,
+                        yes_files,
+                        yes_restore,
+                    } => self.profile_delete_stop_ui(game, name, yes_files, yes_restore, cx),
+                    ClientStopOp::ProfileActivateDefault => self.profile_activate_stop_ui(game, cx),
                     ClientStopOp::EnablePlay { hook } => {
                         self.enable_and_play_op_ui(game, hook, true, cx)
                     }

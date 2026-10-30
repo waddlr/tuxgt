@@ -1,6 +1,7 @@
 //! Per-game executable arguments. Not env knobs and not argv wrappers.
 
 mod catalog;
+mod channel;
 mod compose;
 mod harvest;
 mod publish;
@@ -11,9 +12,8 @@ mod suppress;
 mod template;
 
 pub use catalog::check_tree;
-pub use compose::{
-    arg_count, args_channel, list_shipped, manual_tokens, view, ArgMark, ArgView, GameArgsView,
-};
+pub use channel::{args_channel, args_channel_for};
+pub use compose::{arg_count, list_shipped, manual_tokens, view, ArgMark, ArgView, GameArgsView};
 pub use harvest::{harvest_protonfixes, protondb_has_launch_field};
 pub use publish::{
     clear_custom, disable_arg, discard, enable_arg, save_args, set_arg, set_custom, unset_arg,

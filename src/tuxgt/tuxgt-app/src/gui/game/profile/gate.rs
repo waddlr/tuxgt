@@ -15,11 +15,18 @@ impl Shell {
             let result = cx
                 .background_spawn(async move {
                     rt_block(async {
-                        let stopped = tuxgt_core::StoreClient::stop_for_write(&game, true)?;
-                        let line = tuxgt_core::restore_launch(&data_dir(), &game)?;
                         let pool = open_db_shared(&data_dir()).await?;
                         let host = tuxgt_core::PluginHost::load()?;
-                        tuxgt_core::sync_session(&pool, &data_dir(), &host, &game).await?;
+                        let stopped = tuxgt_core::StoreClient::stop_for_write(&game, true)?;
+                        // Capture the write result so the restart below
+                        // runs even when the write fails.
+                        let line = match tuxgt_core::restore_launch(&data_dir(), &game) {
+                            Ok(line) => tuxgt_core::sync_session(&pool, &data_dir(), &host, &game)
+                                .await
+                                .map(|_| line)
+                                .map_err(|e| e.to_string()),
+                            Err(e) => Err(e.to_string()),
+                        };
                         let restart = match stopped {
                             Some(client) => client.restart_detached().map_err(|e| e.to_string()),
                             None => Ok(String::new()),
@@ -31,10 +38,12 @@ impl Shell {
             let _ = this.update(cx, |this, cx| {
                 match result {
                     Ok((id, line, restart)) => {
-                        this.status = match restart {
-                            Ok(msg) if !msg.is_empty() => format!("{line} · {msg}"),
-                            Ok(_) => line,
-                            Err(e) => {
+                        this.status = match (line, restart) {
+                            (Ok(line), Ok(msg)) if !msg.is_empty() => {
+                                format!("{line} · {msg}")
+                            }
+                            (Ok(line), Ok(_)) => line,
+                            (Ok(_), Err(e)) | (Err(e), _) => {
                                 this.pending_note = Some(Note::Err(e.clone()));
                                 e
                             }
@@ -105,7 +114,8 @@ impl Shell {
                 .background_spawn(async move {
                     rt_block(async {
                         let pool = open_db_shared(&data_dir()).await?;
-                        tuxgt_core::activate_default_for_write(&pool, &data_dir(), &game_bg).await
+                        tuxgt_core::activate_default_for_write(&pool, &data_dir(), &game_bg, false)
+                            .await
                     })
                 })
                 .await;
@@ -124,6 +134,19 @@ impl Shell {
                             this.queue_profile_rearm(&game, cx);
                         }
                         (retry.run)(this, cx);
+                    }
+                    Err(tuxgt_core::Error::NeedConfirm(msg))
+                        if msg.starts_with("profile-client-stop:") =>
+                    {
+                        this.profile_retry = Some(retry);
+                        if !this.park_client_stop(
+                            &game,
+                            ClientStopOp::ProfileActivateDefault,
+                            true,
+                            cx,
+                        ) {
+                            this.profile_activate_stop_ui(game.clone(), cx);
+                        }
                     }
                     Err(e) => this.status = format!("{e}"),
                 }

@@ -15,13 +15,16 @@ impl Shell {
             let result = cx
                 .background_spawn(async move {
                     rt_block(async {
-                        let stopped = tuxgt_core::StoreClient::stop_for_write(&game, true)?;
                         let pool = open_db_shared(&data_dir()).await?;
                         let host = tuxgt_core::PluginHost::load()?;
+                        let stopped = tuxgt_core::StoreClient::stop_for_write(&game, true)?;
+                        // Capture the write result so the restart below
+                        // runs even when the write fails.
                         let line =
                             tuxgt_core::rearm_remembered_launch(&pool, &data_dir(), &host, &game)
-                                .await?
-                                .unwrap_or_default();
+                                .await
+                                .map(|report| report.unwrap_or_default())
+                                .map_err(|e| e.to_string());
                         let restart = match stopped {
                             Some(client) => client.restart_detached().map_err(|e| e.to_string()),
                             None => Ok(String::new()),
@@ -33,13 +36,13 @@ impl Shell {
             let _ = this.update(cx, |this, cx| {
                 match result {
                     Ok((id, line, restart)) => {
-                        this.status = match restart {
-                            Ok(msg) if !msg.is_empty() && !line.is_empty() => {
+                        this.status = match (line, restart) {
+                            (Ok(line), Ok(msg)) if !msg.is_empty() && !line.is_empty() => {
                                 format!("{line} · {msg}")
                             }
-                            Ok(msg) if !msg.is_empty() => msg,
-                            Ok(_) => line,
-                            Err(e) => {
+                            (Ok(_), Ok(msg)) if !msg.is_empty() => msg,
+                            (Ok(line), Ok(_)) => line,
+                            (Ok(_), Err(e)) | (Err(e), _) => {
                                 this.pending_note = Some(Note::Err(e.clone()));
                                 e
                             }
