@@ -120,6 +120,9 @@ impl Shell {
                         if out.restore_deferred {
                             this.queue_profile_restore(&game, cx);
                         }
+                        if out.rearm_deferred {
+                            this.queue_profile_rearm(&game, cx);
+                        }
                         (retry.run)(this, cx);
                     }
                     Err(e) => this.status = format!("{e}"),

@@ -19,7 +19,7 @@ Surfaces (Exists):
 | `game.args` | Catalog load, merge, working copy, suppression |
 | `args.catalog` | Shipped data files + `args-check` |
 | `launch.args-delivery` | `LaunchNeeds.args`, Save, manual `LaunchSpec` |
-| `gui.game-args` | General group, above Tools |
+| `gui.game-args` | General group, Column 2 Row 3 (under Launch Mode) |
 | `args.harvest` | Offline maintainer tool. PCGW and Lutris inputs stay unbuilt |
 
 ### Catalog on disk
@@ -182,7 +182,7 @@ tuxgt args discard <id>
 
 ### GUI
 
-`gui.game-args`, a sibling of `gui/game/env.rs`, painted from General. One **Launch Arguments** group on General, in the right stack, above Tools. Reuse `labeled_row`. Ungrouped flag = switch. Enum = value menu. A `group` is one control: none, then each member (an enum member opens that member's values). Help is the catalog string, tooltip on the label, source link when `source_url` is set. Per-arg help stays en-US in the TOML. Chrome goes through `Strings::get` and the `GUI_IDS` allowlist:
+`gui.game-args`, a sibling of `gui/game/env.rs`, painted from General. One **Launch Arguments** group on General, Column 2 Row 3 (under Launch Mode). Reuse `labeled_row`. Ungrouped flag = switch. Enum = value menu. A `group` is one control: none, then each member (an enum member opens that member's values). Help is the catalog string, tooltip on the label, source link when `source_url` is set. Per-arg help stays en-US in the TOML. Chrome goes through `Strings::get` and the `GUI_IDS` allowlist:
 
 | Id | en-US |
 |---|---|

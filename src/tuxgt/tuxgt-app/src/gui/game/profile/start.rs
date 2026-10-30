@@ -1,4 +1,4 @@
-/// Hero body, top to bottom. The profile control is its own row.
+/// Hero body, top to bottom. The profile pill is its own row.
 pub(crate) const HERO_BODY: [&str; 4] = ["hero-play", "hero-profile", "hero-chips", "hero-title"];
 
 /// How a new profile starts. One is always selected; the dialog opens on Copy.
@@ -23,7 +23,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn profile_row_sits_between_play_and_chips() {
+    fn profile_pill_sits_between_play_and_chips() {
         assert_eq!(
             HERO_BODY,
             ["hero-play", "hero-profile", "hero-chips", "hero-title"]

@@ -106,6 +106,10 @@ pub enum ClientStopOp {
     /// Profile switch dropped the last Apply need while the client was running.
     /// Confirm stops the client and restores launch options. It does not unhook.
     ProfileRestore,
+    /// Profile switch back to a needs profile must re-apply the remembered
+    /// Update Launch Options arm, but the client was running. Confirm stops
+    /// the client, re-applies, and restarts it.
+    ProfileRearm,
     EnablePlay {
         hook: bool,
     },

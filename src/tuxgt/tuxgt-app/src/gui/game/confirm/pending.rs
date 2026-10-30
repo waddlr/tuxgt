@@ -189,6 +189,7 @@ impl Shell {
                         self.launch_mode_op_ui(game, LaunchMode::Hook, true, cx)
                     }
                     ClientStopOp::ProfileRestore => self.profile_restore_ui(game, cx),
+                    ClientStopOp::ProfileRearm => self.profile_rearm_ui(game, cx),
                     ClientStopOp::EnablePlay { hook } => {
                         self.enable_and_play_op_ui(game, hook, true, cx)
                     }
@@ -217,5 +218,6 @@ impl Shell {
             }
         }
         self.flush_profile_restore(cx);
+        self.flush_profile_rearm(cx);
     }
 }

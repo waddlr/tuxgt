@@ -74,12 +74,34 @@ impl Shell {
 
     pub(crate) fn general_tab(&self, view: Entity<Self>, cx: &App) -> impl IntoElement {
         let game_id = self.selected.clone().unwrap_or_default();
+        // Column 1: About, then Extra wrappers | Tools in equal halves.
+        let left = v_flex()
+            .id("general-left")
+            .gap_3()
+            .child(self.about_section(view.clone(), cx))
+            .child(widgets::cols(
+                "general-left-r2",
+                220.,
+                false,
+                vec![
+                    (
+                        1,
+                        self.wrappers_section(&game_id, view.clone(), cx)
+                            .into_any_element(),
+                    ),
+                    (1, self.prefix_body(view.clone(), cx).into_any_element()),
+                ],
+            ));
+        // Column 2: Profile, Launch Mode, Launch Arguments.
         // R37: the Launch Mode card carries the per-game adapter choice, so
         // it paints for every row; only the channel radio is store-only (gated
         // inside the section).
-        let mut right = v_flex().id("general-r1-right").gap_3();
-        right = right.child(self.launch_mode_section(view.clone(), cx));
-        right = right.child(self.general_side(&game_id, view.clone(), cx));
+        let right = v_flex()
+            .id("general-r1-right")
+            .gap_3()
+            .child(self.profile_section(view.clone(), cx))
+            .child(self.launch_mode_section(view.clone(), cx))
+            .child(self.args_section(&game_id, view.clone(), cx));
         v_flex()
             .id("general")
             .gap_3()
@@ -87,10 +109,7 @@ impl Shell {
                 "general-r1",
                 220.,
                 true,
-                vec![
-                    (6, self.about_section(view.clone(), cx).into_any_element()),
-                    (4, right.into_any_element()),
-                ],
+                vec![(6, left.into_any_element()), (4, right.into_any_element())],
             ))
             .child(self.general_advanced(view, cx))
     }
@@ -111,7 +130,6 @@ impl Shell {
         // is the game version users recognize. A real version row needs its
         // own channel (TASKS: about-game-version).
         widgets::section_card("about", cx)
-            .h_full()
             .child(self.about_header(g, view.clone(), cx))
             .children(self.about_id_rows(g, appid.as_deref(), view.clone(), cx))
             .child(self.about_protondb_row(appid.as_deref(), &summary.tier, cx))

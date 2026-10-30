@@ -44,6 +44,7 @@ async fn use_profile(pool: &SqlitePool, dir: &Path, id: &str, name: &str, yes: b
         match switch_profile(pool, dir, id, &profile_id, yes_files, yes_restore).await {
             Ok(out) => {
                 finish_restore(pool, dir, id, yes, out.restore_deferred).await?;
+                finish_rearm(pool, dir, id, yes, out.rearm_deferred).await?;
                 println!("{name}");
                 return Ok(());
             }
@@ -89,6 +90,7 @@ async fn remove(pool: &SqlitePool, dir: &Path, id: &str, name: &str, yes: bool) 
         match delete_profile(pool, dir, id, name, yes_files, yes_restore).await {
             Ok(out) => {
                 finish_restore(pool, dir, id, yes, out.restore_deferred).await?;
+                finish_rearm(pool, dir, id, yes, out.rearm_deferred).await?;
                 println!("{name}");
                 return Ok(());
             }
@@ -140,6 +142,31 @@ async fn finish_restore(
     println!("{line}");
     let host = PluginHost::load()?;
     sync_session(pool, dir, &host, id).await?;
+    Ok(())
+}
+
+/// Mirror of `finish_restore` for the remembered Apply arm: the switch
+/// deferred the re-apply because the store client was running.
+async fn finish_rearm(
+    pool: &SqlitePool,
+    dir: &Path,
+    id: &str,
+    yes: bool,
+    rearm_deferred: bool,
+) -> CliResult {
+    if !rearm_deferred {
+        return Ok(());
+    }
+    let host = PluginHost::load()?;
+    let line = with_store_write(id, yes, true, || async {
+        Ok(rearm_remembered_launch(pool, dir, &host, id)
+            .await?
+            .unwrap_or_default())
+    })
+    .await?;
+    if !line.is_empty() {
+        println!("{line}");
+    }
     Ok(())
 }
 
@@ -195,6 +222,7 @@ async fn accept_default(pool: &SqlitePool, game: &str, msg: &str) -> CliResult {
     confirm_add_default(msg, io::stdin().is_terminal())?;
     let out = activate_default_for_write(pool, &data_dir(), game).await?;
     finish_restore(pool, &data_dir(), game, false, out.restore_deferred).await?;
+    finish_rearm(pool, &data_dir(), game, false, out.rearm_deferred).await?;
     Ok(())
 }
 

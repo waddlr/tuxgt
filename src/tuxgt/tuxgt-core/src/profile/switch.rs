@@ -26,6 +26,10 @@ pub struct SwitchPreview {
 pub struct SwitchOutcome {
     pub active: String,
     pub restore_deferred: bool,
+    /// A remembered Update Launch Options arm could not re-apply inside
+    /// the switch because the store client runs; the caller finishes it
+    /// through the client-stop flow (`rearm_remembered_launch`).
+    pub rearm_deferred: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -36,6 +40,10 @@ struct Journal {
     yes_files: bool,
     yes_restore: bool,
     drops_needs: bool,
+    /// Launch Mode arm captured before parking (`hook` | `apply`), so a
+    /// resumed switch still knows what its disarm must remember.
+    #[serde(default)]
+    arm: Option<String>,
 }
 
 pub async fn preview_switch(
@@ -70,6 +78,7 @@ pub async fn switch_profile(
         return Ok(SwitchOutcome {
             active: target.to_string(),
             restore_deferred: false,
+            rearm_deferred: false,
         });
     }
     let preview = diff(pool, data_dir, game_id, &set.active, target).await?;
@@ -84,6 +93,7 @@ pub async fn switch_profile(
             "{RESTORE_PREFIX}Update Launch Options will be restored."
         )));
     }
+    crate::session::migrate_handle(pool).await?;
     let journal = Journal {
         phase: "parking".into(),
         from: set.active.clone(),
@@ -91,6 +101,7 @@ pub async fn switch_profile(
         yes_files,
         yes_restore,
         drops_needs: preview.drops_needs,
+        arm: super::arm::current_arm(pool, data_dir, game_id).await?,
     };
     let gdir = game_root_dir(data_dir, game_id)?;
     write_journal(&gdir, &journal)?;
@@ -186,12 +197,22 @@ async fn advance(
                 let host = PluginHost::load()?;
                 prewire_game(data_dir, pool, game_id).await?;
                 sync_session(pool, data_dir, &host, game_id).await?;
+                let rearm_deferred = super::arm::settle_launch_memory(
+                    pool,
+                    data_dir,
+                    &host,
+                    game_id,
+                    &gdir,
+                    journal.arm.as_deref(),
+                )
+                .await;
                 let _ = fs::remove_file(journal_path(&gdir));
                 let deferred =
                     journal.drops_needs && crate::read_record(data_dir, game_id)?.is_some();
                 return Ok(SwitchOutcome {
                     active: journal.to,
                     restore_deferred: deferred,
+                    rearm_deferred,
                 });
             }
             other => {

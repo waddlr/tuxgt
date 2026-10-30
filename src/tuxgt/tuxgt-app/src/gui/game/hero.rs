@@ -131,7 +131,7 @@ impl Shell {
                                 })
                             }),
                     )
-                    .child(self.profile_row(view.clone(), cx))
+                    .child(self.profile_pill(cx))
                     .child(
                         h_flex()
                             .id(HERO_BODY[2])

@@ -175,20 +175,4 @@ impl Shell {
             })
             .into_any_element()
     }
-
-    /// Right stack under Launch Mode: wrappers, launch arguments, Tools.
-    pub(crate) fn general_side(
-        &self,
-        game_id: &str,
-        view: Entity<Self>,
-        cx: &App,
-    ) -> impl IntoElement {
-        v_flex()
-            .id("general-side")
-            .w_full()
-            .gap_3()
-            .child(self.wrappers_section(game_id, view.clone(), cx))
-            .child(self.args_section(game_id, view.clone(), cx))
-            .child(self.prefix_body(view, cx))
-    }
 }

@@ -107,7 +107,13 @@ impl Shell {
                         .by_id(DEFAULT_ID)
                         .map(|p| p.name.clone())
                         .unwrap_or_else(|| "Default".to_string());
-                    this.after_profile_switch(&game, &active, out.restore_deferred, cx);
+                    this.after_profile_switch(
+                        &game,
+                        &active,
+                        out.restore_deferred,
+                        out.rearm_deferred,
+                        cx,
+                    );
                 }
                 Err(tuxgt_core::Error::NeedConfirm(msg))
                     if msg.starts_with("profile-files:") && !yes_files =>
@@ -120,7 +126,7 @@ impl Shell {
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())
                         .collect();
-                    open_files(this_view(cx), window, cx, dests, {
+                    open_files(this_view(cx), this.strings.clone(), window, cx, dests, {
                         let name = name.clone();
                         move |this, cx| this.delete_go(name.clone(), true, false, cx)
                     });
@@ -128,7 +134,7 @@ impl Shell {
                 Err(tuxgt_core::Error::NeedConfirm(msg))
                     if msg.starts_with("profile-restore:") && !yes_restore =>
                 {
-                    open_restore(this_view(cx), window, cx, {
+                    open_restore(this_view(cx), this.strings.clone(), window, cx, {
                         let name = name.clone();
                         move |this, cx| this.delete_go(name.clone(), true, true, cx)
                     });

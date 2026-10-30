@@ -120,6 +120,7 @@ impl Shell {
         self.fetch_for_tab(cx);
         self.clear_pending_confirm();
         self.flush_profile_restore(cx);
+        self.flush_profile_rearm(cx);
         self.clear_pending_provide();
         self.mods_picker_open = false;
         self.picker_checked.clear();

@@ -83,6 +83,9 @@ pub struct Shell {
     /// card that was already up, until the client stop runs or the user
     /// cancels that stop.
     pub(crate) profile_restore_game: Option<String>,
+    /// Remembered Apply re-arm still owed after a profile switch back to
+    /// a profile with needs. Same queue discipline as the restore above.
+    pub(crate) profile_rearm_game: Option<String>,
     pub(crate) pending_note: Option<Note>,
     pub(crate) knobs: Box<[&'static EnvKnob]>,
     /// T24 precomputed knob paint ids by knob id. Rebuilt wherever `knobs`

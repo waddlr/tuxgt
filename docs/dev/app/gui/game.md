@@ -3,7 +3,7 @@
 ## Hero (`gui.game-hero`)
 
 Full-bleed wash in the main pane with a guaranteed minimum height; no bordered hero card; no second cover thumb.
-The overlay content is bottom-anchored — Play row → profile row → chips row → title last — over a true fade just above the TabBar (no gap between banner and tabs).
+The overlay content is bottom-anchored — Play row → profile pill row → chips row → title last — over a true fade just above the TabBar (no gap between banner and tabs).
 
 - Wash: **wide art only**. Prefer Steam `library_hero` (then `library_header` /
   `header`) as `header_path`. Width-fill crop-fit. **Never** a
@@ -12,7 +12,9 @@ The overlay content is bottom-anchored — Play row → profile row → chips ro
   from a remote `header_path` URL or SteamGridDB `hero_url` (not grids)
   (`gui.metadata-fetch`). No heavy blur.
 - Overlay, left column (no right column), top to bottom: **Play** row,
-  profile row (`gui.profile`: the active setup, its own row, not a chip),
+  profile pill row (`gui.profile`: one display-only muted pill
+  `Profile: <name>`, its own row; selection lives in the General
+  Profile card),
   chips + **Mods** / **Knobs** pill row, **display name** last (`headline_lg` + 2,
   20 at Default, still following `font_scale`).
   Title paints theme **foreground**; the pills carry solid wells. A true fade
@@ -79,8 +81,8 @@ Titlebar: first tab (General) is `{Manager} / {display name}`; other tabs
 append ` / Mods` or ` / Env`. Restart of a game opens General. Legacy
 `view = "prefix"` opens General.
 
-General is two rows then Advanced. The right stack includes Launch Arguments
-(`gui.game-args`). Mods is instances. Environment is knobs + custom env.
+General is two columns then Advanced (below). Mods is instances.
+Environment is knobs + custom env.
 
 Play is `docs/dev/app/core/launch.md`: Steam/Heroic dispatch to the store client.
 Hook mode → GE/Cachy injects via protonfixes (no Apply). Applied mode →
@@ -98,9 +100,10 @@ loads extras + AppID. Mods fetches mod extra. Env refreshes env.
 
 ## General
 
-Row 1: **About (60%) | right stack (40%)**: **Launch Mode** (store rows
-only), then stacked **Extra wrappers**, **Launch Arguments**, **Tools**.
-No second row. Then **Advanced**.
+Two columns, then **Advanced**. Column 1 (60%): Row 1 **About**;
+Row 2 **Extra wrappers** | **Tools** side by side in equal halves.
+Column 2 (40%): Row 1 **Profile**; Row 2 **Launch Mode** (store-row
+radio, card painted for every row); Row 3 **Launch Arguments**.
 
 No page-level diagnostics banner. Do not paint: effective launch preview,
 prefix tree, doctor, snapshots, a separate Identity or Paths card.
@@ -140,6 +143,15 @@ tooltip carrying the full value.
    id).
 8. Hide from TuxGT library switch (per-game override only; does not change
    the store).
+
+### Profile
+
+Column 2 Row 1, every manager. Rules: `docs/dev/app/plugin/profile.md`.
+Card like Launch Mode: title **Profile**, one muted line — “A profile
+is a saved set of mods and settings for this game.” — then a
+**Current** row whose dropdown is the profile menu (switch, New,
+Rename, Delete). The hero pill only names the active profile; it does
+not select.
 
 ### Launch Mode
 
@@ -434,7 +446,7 @@ entries; empty “No custom variables.”
 
 Rules: `docs/dev/app/plugin/game-args.md`.
 
-One **Launch Arguments** group on General, in the right stack, above Tools. An ungrouped flag is a switch. An enum is a value menu. Flags that share a `group` are one control (None, then one member). Suppressed rows are a muted **Applied by Proton** list with no switch. Freeform values are read-only here; the tooltip shows the `tuxgt args set` line. Help is a tooltip on the label.
+One **Launch Arguments** group on General, Column 2 Row 3 (under Launch Mode). An ungrouped flag is a switch. An enum is a value menu. Flags that share a `group` are one control (None, then one member). Suppressed rows are a muted **Applied by Proton** list with no switch. Freeform values are read-only here; the tooltip shows the `tuxgt args set` line. Help is a tooltip on the label.
 
 A store row with unsaved edits shows **Save** and **Discard**. Save writes Steam or Heroic and restarts that client once. Toggles do not. The hero pill does not write. Clicking `{n} args` opens General. The pill carries a chevron.
 

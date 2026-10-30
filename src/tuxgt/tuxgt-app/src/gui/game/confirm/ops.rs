@@ -20,11 +20,23 @@ impl Shell {
                     ..
                 })
             );
+            let drop_rearm = matches!(
+                self.pending_confirm,
+                Some(PendingConfirm::ClientStop {
+                    op: ClientStopOp::ProfileRearm,
+                    ..
+                })
+            );
             self.clear_pending_confirm();
             if drop_restore {
                 self.profile_restore_game = None;
             } else {
                 self.flush_profile_restore(cx);
+            }
+            if drop_rearm {
+                self.profile_rearm_game = None;
+            } else {
+                self.flush_profile_rearm(cx);
             }
             cx.notify();
             return;
@@ -85,6 +97,7 @@ impl Shell {
         }
         self.clear_pending_confirm();
         self.flush_profile_restore(cx);
+        self.flush_profile_rearm(cx);
         cx.notify();
     }
     /// Running-client guard shared by the Launch Mode radio and Enable &

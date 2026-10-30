@@ -250,13 +250,13 @@ pub(crate) fn open_delete_profile(view: Entity<Shell>, window: &mut Window, cx: 
 
 pub(crate) fn open_files(
     view: Entity<Shell>,
+    strings: tuxgt_core::Strings,
     window: &mut Window,
     cx: &mut App,
     dests: Vec<String>,
     go: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
 ) {
     let go: std::rc::Rc<dyn Fn(&mut Shell, &mut Context<Shell>)> = std::rc::Rc::new(go);
-    let strings = view.read(cx).strings.clone();
     let title = strings.get("gui-profile-files");
     let confirm = strings.get("gui-action-confirm");
     let cancel = strings.get("gui-action-cancel");
@@ -272,12 +272,12 @@ pub(crate) fn open_files(
 
 pub(crate) fn open_restore(
     view: Entity<Shell>,
+    strings: tuxgt_core::Strings,
     window: &mut Window,
     cx: &mut App,
     go: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
 ) {
     let go: std::rc::Rc<dyn Fn(&mut Shell, &mut Context<Shell>)> = std::rc::Rc::new(go);
-    let strings = view.read(cx).strings.clone();
     let title = strings.get("gui-profile-restore");
     let confirm = strings.get("gui-action-confirm");
     let cancel = strings.get("gui-action-cancel");

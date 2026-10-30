@@ -2,6 +2,7 @@
 //! Inactive roots live in `profiles/<id>/`. Link, history, and one-shot are
 //! later tasks and have no on-disk fields here.
 
+mod arm;
 mod copy;
 mod files;
 mod gate;
@@ -26,6 +27,7 @@ use sqlx::SqlitePool;
 
 use crate::{atomic_write, game_dir, game_exists, Error, GameId, Result};
 
+pub use arm::rearm_remembered_launch;
 pub use copy::{create_copy, create_empty};
 pub use gate::{activate_default_for_write, ensure_profile_write};
 pub use switch::{preview_switch, switch_profile, SwitchOutcome, SwitchPreview};
@@ -262,6 +264,7 @@ pub async fn rename_profile(
 pub struct DeleteOutcome {
     pub set: ProfileSet,
     pub restore_deferred: bool,
+    pub rearm_deferred: bool,
 }
 
 pub async fn delete_profile(
@@ -282,12 +285,12 @@ pub async fn delete_profile(
             "Unmodded and Default cannot be deleted".into(),
         ));
     }
-    let restore_deferred = if set.active == profile.id {
-        switch_profile(pool, data_dir, game_id, DEFAULT_ID, yes_files, yes_restore)
-            .await?
-            .restore_deferred
+    let (restore_deferred, rearm_deferred) = if set.active == profile.id {
+        let out =
+            switch_profile(pool, data_dir, game_id, DEFAULT_ID, yes_files, yes_restore).await?;
+        (out.restore_deferred, out.rearm_deferred)
     } else {
-        false
+        (false, false)
     };
     let gdir = game_root_dir(data_dir, game_id)?;
     let slot = slot_dir(&gdir, &profile.id)?;
@@ -300,5 +303,6 @@ pub async fn delete_profile(
     Ok(DeleteOutcome {
         set,
         restore_deferred,
+        rearm_deferred,
     })
 }

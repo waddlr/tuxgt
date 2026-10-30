@@ -56,6 +56,7 @@ impl Shell {
                 h_flex()
                     .gap_1()
                     .w_full()
+                    .flex_wrap()
                     .child(tool("winecfg", "winecfg"))
                     .child(tool("regedit", "regedit"))
                     .child(tool("explorer", "explorer"))

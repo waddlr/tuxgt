@@ -188,6 +188,7 @@ pub(super) fn build_window(ctx: &Ctx, cx: &mut App) -> Option<LiveWindow> {
                 profiles: None,
                 profile_retry: None,
                 profile_restore_game: None,
+                profile_rearm_game: None,
                 knob_ids: knob_ids_for(&knobs),
                 knobs: knobs.into_boxed_slice(),
                 pending_note: None,

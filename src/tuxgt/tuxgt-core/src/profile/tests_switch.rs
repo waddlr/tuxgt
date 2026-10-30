@@ -206,6 +206,194 @@ async fn resume_finishes_a_parking_journal() {
     fx.drop().await;
 }
 
+#[tokio::test]
+async fn hook_arm_is_remembered_across_an_unmodded_roundtrip() {
+    let fx = fix("hookmem").await;
+    set_custom(&fx.pool, &fx.id, "PROFILE_MARK", "armed")
+        .await
+        .unwrap();
+    let host =
+        crate::PluginHost::load_with(crate::plugin::FIRST_PARTY, fx.dir.join("config")).unwrap();
+    crate::set_handle(&fx.pool, &fx.dir, &host, &fx.id, true)
+        .await
+        .unwrap();
+    assert!(crate::game_handle(&fx.pool, &fx.id).await.unwrap());
+    ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
+    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+        .await
+        .unwrap();
+    assert!(!crate::game_handle(&fx.pool, &fx.id).await.unwrap());
+    let memory = std::fs::read_to_string(fx.game_dir.join("launch-memory.toml")).unwrap();
+    assert!(memory.contains("hook"), "{memory}");
+    switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true)
+        .await
+        .unwrap();
+    assert!(crate::game_handle(&fx.pool, &fx.id).await.unwrap());
+    assert!(!fx.game_dir.join("launch-memory.toml").exists());
+    let conf = std::fs::read_to_string(fx.game_dir.join("tux-protonfixes.conf")).unwrap();
+    assert!(conf.contains("inject=1"), "{conf}");
+    fx.drop().await;
+}
+
+#[tokio::test]
+async fn apply_arm_is_remembered_when_a_switch_restores_it() {
+    let fx = fix_steam("814383").await;
+    let _stopped = StoreClient::set_running_for_test(StoreClient::Steam, false);
+    set_custom(&fx.pool, &fx.id, "PROFILE_MARK", "armed")
+        .await
+        .unwrap();
+    crate::apply::write_record(
+        &fx.dir,
+        &crate::ApplyRecord {
+            game: fx.id.clone(),
+            manager: "steam".into(),
+            launcher: "/tmp/tuxgt-launcher".into(),
+            applied_at: 0,
+            files: vec![],
+        },
+    )
+    .unwrap();
+    ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
+    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+        .await
+        .unwrap();
+    assert!(crate::read_record(&fx.dir, &fx.id).unwrap().is_none());
+    let memory = std::fs::read_to_string(fx.game_dir.join("launch-memory.toml")).unwrap();
+    assert!(memory.contains("apply"), "{memory}");
+    fx.drop().await;
+}
+
+#[tokio::test]
+async fn apply_rearm_defers_while_the_store_client_runs() {
+    let fx = fix_steam("814384").await;
+    let _stopped = StoreClient::set_running_for_test(StoreClient::Steam, false);
+    set_custom(&fx.pool, &fx.id, "PROFILE_MARK", "armed")
+        .await
+        .unwrap();
+    crate::apply::write_record(
+        &fx.dir,
+        &crate::ApplyRecord {
+            game: fx.id.clone(),
+            manager: "steam".into(),
+            launcher: "/tmp/tuxgt-launcher".into(),
+            applied_at: 0,
+            files: vec![],
+        },
+    )
+    .unwrap();
+    ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
+    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+        .await
+        .unwrap();
+    drop(_stopped);
+    let _running = StoreClient::set_running_for_test(StoreClient::Steam, true);
+    let done = switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true)
+        .await
+        .unwrap();
+    assert_eq!(done.active, DEFAULT_ID);
+    assert!(done.rearm_deferred);
+    assert!(crate::read_record(&fx.dir, &fx.id).unwrap().is_none());
+    let memory = std::fs::read_to_string(fx.game_dir.join("launch-memory.toml")).unwrap();
+    assert!(memory.contains("apply"), "{memory}");
+    fx.drop().await;
+}
+
+#[tokio::test]
+async fn memory_survives_a_switch_between_need_free_profiles() {
+    let fx = fix("hookkeep").await;
+    set_custom(&fx.pool, &fx.id, "PROFILE_MARK", "armed")
+        .await
+        .unwrap();
+    let host =
+        crate::PluginHost::load_with(crate::plugin::FIRST_PARTY, fx.dir.join("config")).unwrap();
+    crate::set_handle(&fx.pool, &fx.dir, &host, &fx.id, true)
+        .await
+        .unwrap();
+    ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
+    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+        .await
+        .unwrap();
+    let blank = crate::create_empty(&fx.pool, &fx.dir, &fx.id, "Blank")
+        .await
+        .unwrap();
+    switch_profile(&fx.pool, &fx.dir, &fx.id, &blank.id, true, true)
+        .await
+        .unwrap();
+    let memory = std::fs::read_to_string(fx.game_dir.join("launch-memory.toml")).unwrap();
+    assert!(memory.contains("hook"), "{memory}");
+    assert!(!crate::game_handle(&fx.pool, &fx.id).await.unwrap());
+    fx.drop().await;
+}
+
+#[tokio::test]
+async fn stale_memory_clears_when_an_arm_is_already_live() {
+    let fx = fix("stale").await;
+    set_custom(&fx.pool, &fx.id, "PROFILE_MARK", "armed")
+        .await
+        .unwrap();
+    let host =
+        crate::PluginHost::load_with(crate::plugin::FIRST_PARTY, fx.dir.join("config")).unwrap();
+    crate::set_handle(&fx.pool, &fx.dir, &host, &fx.id, true)
+        .await
+        .unwrap();
+    ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
+    std::fs::write(fx.game_dir.join("launch-memory.toml"), "mode = \"hook\"\n").unwrap();
+    let beta = crate::create_copy(&fx.pool, &fx.dir, &fx.id, "Beta", DEFAULT_ID)
+        .await
+        .unwrap();
+    switch_profile(&fx.pool, &fx.dir, &fx.id, &beta.id, true, true)
+        .await
+        .unwrap();
+    assert!(crate::game_handle(&fx.pool, &fx.id).await.unwrap());
+    assert!(!fx.game_dir.join("launch-memory.toml").exists());
+    fx.drop().await;
+}
+
+#[tokio::test]
+async fn illegal_hook_memory_stays_remembered_and_unreadable_memory_is_dropped() {
+    let fx = fix("illegal").await;
+    set_custom(&fx.pool, &fx.id, "PROFILE_MARK", "armed")
+        .await
+        .unwrap();
+    let host =
+        crate::PluginHost::load_with(crate::plugin::FIRST_PARTY, fx.dir.join("config")).unwrap();
+    crate::set_handle(&fx.pool, &fx.dir, &host, &fx.id, true)
+        .await
+        .unwrap();
+    ensure_profiles(&fx.pool, &fx.dir, &fx.id).await.unwrap();
+    switch_profile(&fx.pool, &fx.dir, &fx.id, UNMODDED_ID, true, true)
+        .await
+        .unwrap();
+    // The parked Default gains a launch argument: Hook can no longer
+    // carry its needs, so the remembered arm must wait, not re-arm.
+    let knobs = super::slot_dir(&fx.game_dir, DEFAULT_ID)
+        .unwrap()
+        .join("knobs.toml");
+    let text = std::fs::read_to_string(&knobs).unwrap();
+    let text = if text.contains("args_custom") {
+        text.replace("args_custom = \"\"", "args_custom = \"-foo\"")
+    } else {
+        format!("args_custom = \"-foo\"\n{text}")
+    };
+    std::fs::write(&knobs, text).unwrap();
+    switch_profile(&fx.pool, &fx.dir, &fx.id, DEFAULT_ID, true, true)
+        .await
+        .unwrap();
+    assert!(!crate::game_handle(&fx.pool, &fx.id).await.unwrap());
+    let memory = std::fs::read_to_string(fx.game_dir.join("launch-memory.toml")).unwrap();
+    assert!(memory.contains("hook"), "{memory}");
+    // A corrupt memory file must not brick the next switch.
+    std::fs::write(fx.game_dir.join("launch-memory.toml"), "not toml").unwrap();
+    let beta = crate::create_copy(&fx.pool, &fx.dir, &fx.id, "Beta", DEFAULT_ID)
+        .await
+        .unwrap();
+    switch_profile(&fx.pool, &fx.dir, &fx.id, &beta.id, true, true)
+        .await
+        .unwrap();
+    assert!(!fx.game_dir.join("launch-memory.toml").exists());
+    fx.drop().await;
+}
+
 fn manifest_in(slot: &std::path::Path) -> bool {
     let dir = slot.join("manifests");
     dir.is_dir()

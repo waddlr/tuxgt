@@ -135,8 +135,9 @@ pub use plugin::{PluginDesc, PluginEntry, PluginHost, PluginId, FIRST_PARTY};
 pub use prewire::{ensure_game_init, is_dll, managed_ini, prewire_game};
 pub use profile::{
     activate_default_for_write, create_copy, create_empty, delete_profile, ensure_profile_write,
-    ensure_profiles, preview_switch, rename_profile, switch_profile, DeleteOutcome, Profile,
-    ProfileKind, ProfileSet, SwitchOutcome, SwitchPreview, ADD_TO_DEFAULT, DEFAULT_ID, UNMODDED_ID,
+    ensure_profiles, preview_switch, rearm_remembered_launch, rename_profile, switch_profile,
+    DeleteOutcome, Profile, ProfileKind, ProfileSet, SwitchOutcome, SwitchPreview, ADD_TO_DEFAULT,
+    DEFAULT_ID, UNMODDED_ID,
 };
 pub use provider::heroic::heroic_running;
 pub use provider::steam::steam_icon_for_appid;
@@ -219,6 +220,23 @@ mod tests {
         let cur = s.get_args("gui-sort-current", Some(&args));
         assert!(cur.starts_with("Sort: "), "sort current: {cur}");
         assert_ne!(cur, "gui-sort-current");
+    }
+
+    #[test]
+    fn profile_card_strings_resolve() {
+        let s = Strings::en_us().expect("catalog");
+        assert_eq!(s.get("gui-section-profile"), "Profile");
+        assert_eq!(s.get("gui-profile-current"), "Current");
+        assert_eq!(
+            s.get("gui-profile-note"),
+            "A profile is a saved set of mods and settings for this game."
+        );
+        let mut args = FluentArgs::new();
+        args.set("name", "Default".to_string());
+        assert_eq!(
+            s.get_args("gui-profile-pill", Some(&args)),
+            "Profile: Default"
+        );
     }
 
     #[test]
