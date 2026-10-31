@@ -2,6 +2,7 @@ mod about;
 mod about_more;
 mod appid;
 mod args;
+mod args_edit;
 mod args_write;
 mod card;
 mod confirm;

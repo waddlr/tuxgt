@@ -446,7 +446,7 @@ entries; empty “No custom variables.”
 
 Rules: `docs/dev/app/plugin/game-args.md`.
 
-One **Launch Arguments** group on General, Column 2 Row 3 (under Launch Mode). An ungrouped flag is a switch. An enum is a value menu. Flags that share a `group` are one control (None, then one member). Suppressed rows are a muted **Applied by Proton** list with no switch. Freeform values are read-only here; the tooltip shows the `tuxgt args set` line. Help is a tooltip on the label.
+One **Launch Arguments** group on General, Column 2 Row 3 (under Launch Mode). An ungrouped flag is a switch. An enum is a value menu. Flags that share a `group` are one control (None, then one member). Suppressed rows are a muted **Applied by Proton** list with no switch. A freeform row is a value button opening one shared inline text editor (pre-filled with the stored value); clearing it disables the row and keeps the value. The custom string is a **Custom arguments** row with Add/Edit and trash, edited as one whole string through the same editor; applying empty text clears it. Help is a tooltip on the label.
 
 A store row with unsaved edits shows **Save** and **Discard**. Save writes Steam or Heroic and restarts that client once. Toggles do not. The hero pill does not write. Clicking `{n} args` opens General. The pill carries a chevron.
 

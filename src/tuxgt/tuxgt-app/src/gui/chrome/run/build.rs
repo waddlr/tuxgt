@@ -63,6 +63,8 @@ pub(super) fn build_window(ctx: &Ctx, cx: &mut App) -> Option<LiveWindow> {
             cx.new(|cx| InputState::new(window, cx).placeholder(ctx.labels.override_ph.clone()));
         let custom_env_input =
             cx.new(|cx| InputState::new(window, cx).placeholder(ctx.labels.custom_ph.clone()));
+        let args_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder(ctx.labels.args_ph.clone()));
         // E44: the key editor is masked; the AppID editor is plain.
         let secret_input = cx.new(|cx| {
             InputState::new(window, cx)
@@ -202,6 +204,8 @@ pub(super) fn build_window(ctx: &Ctx, cx: &mut App) -> Option<LiveWindow> {
                 arg_count: 0,
                 args_dirty: false,
                 args_custom: String::new(),
+                args_input,
+                args_editing: None,
                 game_env_advance: false,
                 env_group_open: HashMap::new(),
                 general_advanced: false,

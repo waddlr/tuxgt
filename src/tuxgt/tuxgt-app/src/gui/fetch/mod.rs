@@ -155,6 +155,7 @@ impl Shell {
         self.arg_rows.clear();
         self.args_custom.clear();
         self.args_dirty = false;
+        self.args_editing = None;
     }
 
     /// Catalog rows are held on Settings CorePlugins + Mods; late async

@@ -122,6 +122,10 @@ impl Shell {
             let _ = this.update(cx, |this, cx| {
                 match result {
                     Ok(out) => {
+                        // Activating Default replaced the working copy;
+                        // drop any open args editor (see
+                        // `after_profile_switch`).
+                        this.args_editing = None;
                         this.reload_profiles(cx);
                         this.refresh_mods(&game, cx);
                         this.reload_knob_counts(cx);

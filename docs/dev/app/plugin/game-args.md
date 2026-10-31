@@ -192,12 +192,14 @@ tuxgt args discard <id>
 | `gui-args-discard` | Discard |
 | `gui-args-dirty` | The launcher will use these after Save. |
 | `gui-args-none` | None |
+| `gui-args-custom` | Custom arguments |
+| `gui-args-placeholder` | Value (e.g. 1920 or -novid) |
 | `gui-hero-args` | { $n } args |
 | `gui-mode-hook-args` | Hook can't pass game arguments. |
 
 Suppressed rows sit in a muted **Applied by Proton** list (argument plus the appended value). No switch. They do not count as modifications.
 
-Freeform values are CLI-set. The row shows the value read-only and the `tuxgt args set` line in the tooltip.
+Freeform rows and the custom string edit inline through one shared text input (no per-row inputs): opening a row's editor pre-fills the stored value, Save writes the working copy through the same core calls as the CLI, and clearing a freeform row disables it and keeps the value. The custom string is one whole-string editor under a **Custom arguments** row (Add/Edit, trash to clear); applying empty text clears it. Core validation errors land in the status line and write nothing.
 
 Dirty store rows show Save and Discard on the group. Save is the store write. The hero pill does not write. Clicking `{n} args` opens General. The pill carries a chevron.
 

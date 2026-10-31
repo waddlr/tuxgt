@@ -265,6 +265,9 @@ impl Shell {
         rearm_deferred: bool,
         cx: &mut Context<Self>,
     ) {
+        // The switch replaced the working copy; drop any open args
+        // editor so previous-profile text cannot be saved over it.
+        self.args_editing = None;
         self.reload_profiles(cx);
         self.refresh_mods(game, cx);
         self.reload_knob_counts(cx);

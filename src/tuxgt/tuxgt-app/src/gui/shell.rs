@@ -25,6 +25,14 @@ pub(crate) struct ProfileRetry {
     pub(crate) run: Box<dyn FnOnce(&mut Shell, &mut Context<Shell>)>,
 }
 
+/// Which Launch Arguments row the shared `args_input` editor is open on:
+/// one freeform catalog arg, or the custom-arguments string.
+#[derive(PartialEq, Eq)]
+pub(crate) enum ArgsEdit {
+    Freeform(String),
+    Custom,
+}
+
 pub struct Shell {
     pub(crate) strings: Strings,
     pub(crate) nav: Nav,
@@ -106,6 +114,10 @@ pub struct Shell {
     pub(crate) arg_count: usize,
     pub(crate) args_dirty: bool,
     pub(crate) args_custom: String,
+    /// Shared editor for freeform values and the custom string (one live
+    /// `InputState`, landmine #5). `args_editing` names its row.
+    pub(crate) args_input: Entity<InputState>,
+    pub(crate) args_editing: Option<ArgsEdit>,
     pub(crate) game_env_advance: bool,
     /// Knob-group headers the user has opened or closed, keyed by page, main
     /// or Advance, and title. Cleared when the selected game changes. A

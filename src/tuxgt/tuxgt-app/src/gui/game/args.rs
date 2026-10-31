@@ -1,15 +1,15 @@
 use gpui_kit::component::button::ButtonVariants as _;
-use gpui_kit::component::h_flex;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::Sizable as _;
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use tuxgt_core::{ArgKind, ArgMark, ArgView};
 
 use super::super::widgets;
-use super::super::Shell;
+use super::super::{ArgsEdit, Shell};
 
 impl Shell {
     pub(crate) fn args_section(
@@ -39,12 +39,11 @@ impl Shell {
                     })
                     .cloned()
                     .collect();
-                active.push(self.arg_group_row(game_id, &members, view.clone(), cx));
+                active.push(self.arg_group_row(&members, view.clone(), cx));
             } else {
-                active.push(self.arg_single_row(game_id, row, view.clone(), cx));
+                active.push(self.arg_single_row(row, view.clone(), cx));
             }
         }
-        let custom = self.args_custom.trim();
         widgets::section_card("game-args", cx)
             .child(widgets::section_title(
                 self.strings.get("gui-args-section"),
@@ -86,12 +85,7 @@ impl Shell {
                         widgets::muted(label, cx)
                     }))
             })
-            .when(!custom.is_empty(), |this| {
-                this.child(widgets::muted(custom.to_string(), cx))
-            })
-            .when(rows.is_empty() && custom.is_empty(), |this| {
-                this.child(widgets::muted(self.strings.get("gui-args-none"), cx))
-            })
+            .child(self.args_custom_block(view, cx))
     }
 
     fn args_text_btn(
@@ -111,32 +105,30 @@ impl Shell {
             })
     }
 
-    fn arg_single_row(
-        &self,
-        game_id: &str,
-        row: &ArgView,
-        view: Entity<Self>,
-        cx: &App,
-    ) -> gpui_kit::AnyElement {
+    fn arg_single_row(&self, row: &ArgView, view: Entity<Self>, cx: &App) -> gpui_kit::AnyElement {
+        let editing = row.kind == ArgKind::Freeform
+            && matches!(&self.args_editing, Some(ArgsEdit::Freeform(id)) if id == &row.id);
         let control = match row.kind {
-            ArgKind::Flag => self.arg_switch(row, view, cx).into_any_element(),
-            ArgKind::Enum => self.arg_enum_menu(row, view, cx).into_any_element(),
-            ArgKind::Freeform => widgets::muted(
-                if row.value.is_empty() {
-                    self.strings.get("gui-args-none")
-                } else {
-                    row.value.clone().into()
-                },
-                cx,
-            )
-            .into_any_element(),
+            ArgKind::Flag => self.arg_switch(row, view.clone(), cx).into_any_element(),
+            ArgKind::Enum => self.arg_enum_menu(row, view.clone(), cx).into_any_element(),
+            ArgKind::Freeform => self
+                .arg_freeform_btn(row, view.clone(), cx)
+                .into_any_element(),
         };
-        self.arg_labeled(game_id, row, control, cx)
+        let labeled = self.arg_labeled(row, control, cx);
+        if editing {
+            v_flex()
+                .gap_1()
+                .child(labeled)
+                .child(self.args_editor(view, cx))
+                .into_any_element()
+        } else {
+            labeled
+        }
     }
 
     fn arg_group_row(
         &self,
-        game_id: &str,
         members: &[ArgView],
         view: Entity<Self>,
         cx: &App,
@@ -209,7 +201,7 @@ impl Shell {
                     menu
                 }
             });
-        self.arg_labeled(game_id, &head, control, cx)
+        self.arg_labeled(&head, control, cx)
     }
 
     fn arg_switch(&self, row: &ArgView, view: Entity<Self>, _cx: &App) -> Switch {
@@ -273,15 +265,11 @@ impl Shell {
 
     fn arg_labeled(
         &self,
-        game_id: &str,
         row: &ArgView,
         control: impl IntoElement,
         cx: &App,
     ) -> gpui_kit::AnyElement {
         let mut tip = row.help.clone();
-        if row.kind == ArgKind::Freeform {
-            tip.push_str(&format!("\ntuxgt args set {game_id} {} <value>", row.id));
-        }
         if let Some(url) = &row.source_url {
             tip.push('\n');
             tip.push_str(url);

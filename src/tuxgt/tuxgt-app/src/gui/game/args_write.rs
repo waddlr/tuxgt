@@ -6,6 +6,8 @@ use super::super::{rt_block, ClientStopOp, Shell};
 enum ArgOp {
     Set { id: String, value: Option<String> },
     Disable { ids: Vec<String> },
+    SetCustom { value: String },
+    ClearCustom,
 }
 
 impl Shell {
@@ -20,6 +22,14 @@ impl Shell {
 
     pub(crate) fn disable_game_args(&mut self, ids: Vec<String>, cx: &mut Context<Self>) {
         self.write_args(ArgOp::Disable { ids }, cx);
+    }
+
+    pub(crate) fn set_custom_args(&mut self, value: String, cx: &mut Context<Self>) {
+        self.write_args(ArgOp::SetCustom { value }, cx);
+    }
+
+    pub(crate) fn clear_custom_args(&mut self, cx: &mut Context<Self>) {
+        self.write_args(ArgOp::ClearCustom, cx);
     }
 
     fn write_args(&mut self, write: ArgOp, cx: &mut Context<Self>) {
@@ -54,6 +64,13 @@ impl Shell {
                                 for id in ids {
                                     tuxgt_core::disable_arg(&pool, &dir, &host, &game, &id).await?;
                                 }
+                            }
+                            ArgOp::SetCustom { value } => {
+                                tuxgt_core::set_custom_args(&pool, &dir, &host, &game, &value)
+                                    .await?;
+                            }
+                            ArgOp::ClearCustom => {
+                                tuxgt_core::clear_custom(&pool, &dir, &host, &game).await?;
                             }
                         }
                         Ok(())
@@ -141,6 +158,10 @@ impl Shell {
     }
 
     pub(crate) fn discard_args_ui(&mut self, game: &str, cx: &mut Context<Self>) {
+        // Discard replaces the whole working copy; an open editor would
+        // hold pre-discard text and could save it back over the restore.
+        self.args_editing = None;
+        cx.notify();
         let game = game.to_string();
         let retry_game = game.clone();
         let transfer = self.hide_state.installing();
