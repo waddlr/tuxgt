@@ -32,7 +32,7 @@ mod picker;
 mod picker_tests;
 mod picker_util;
 mod play;
-mod profile;
+pub(crate) mod profile;
 mod provide_park;
 mod rows;
 mod slot_change;

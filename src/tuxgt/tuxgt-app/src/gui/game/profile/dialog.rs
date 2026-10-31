@@ -1,357 +1,242 @@
-use gpui_kit::component::button::ButtonVariants as _;
-use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::{h_flex, v_flex, Sizable as _, WindowExt as _};
-use gpui_kit::*;
-use tuxgt_core::FluentArgs;
+use std::rc::Rc;
 
-use super::super::super::widgets;
+use gpui_kit::component::input::InputState;
+use gpui_kit::*;
+use tuxgt_core::ProfileKind;
+
 use super::super::super::Shell;
 use super::{default_new_start, NewStart};
 
-struct NewPick {
-    start: NewStart,
-    base: String,
+/// The parked continuation behind the Files/Restore confirms.
+pub(crate) type ProfileGo = Rc<dyn Fn(&mut Shell, &mut Context<Shell>)>;
+
+/// A profile dialog parked as shell state and painted by
+/// `profile_dialog_layer` (app-owned centered modal, client-stop style)
+/// instead of the kit's top-anchored dialog. Confirm runs the parked
+/// action; Cancel, click-outside, and Escape just drop it.
+pub(crate) enum ProfileDialog {
+    New {
+        name_input: Entity<InputState>,
+        start: NewStart,
+        base: String,
+        rows: Vec<(String, String)>,
+    },
+    Rename {
+        old: String,
+        input: Entity<InputState>,
+    },
+    Delete {
+        name: String,
+    },
+    Files {
+        dests: Vec<String>,
+        go: ProfileGo,
+    },
+    Restore {
+        go: ProfileGo,
+    },
 }
 
 pub(crate) fn open_new_profile(view: Entity<Shell>, window: &mut Window, cx: &mut App) {
+    if view.read(cx).profile_dialog.is_some() {
+        return;
+    }
     let Some(set) = view.read(cx).profiles.clone() else {
         return;
     };
     let strings = view.read(cx).strings.clone();
-    let active = set.active.clone();
+    let name_ph = strings.get("gui-profile-name");
+    let name_input = cx.new(|cx| InputState::new(window, cx).placeholder(name_ph));
     let rows: Vec<(String, String)> = set
         .profiles
         .iter()
         .map(|p| (p.id.clone(), p.name.clone()))
         .collect();
-    let name_ph = strings.get("gui-profile-name");
-    let name_input = cx.new(|cx| InputState::new(window, cx).placeholder(name_ph.clone()));
-    let pick = cx.new(|_| NewPick {
-        start: default_new_start(),
-        base: active,
+    let focus = name_input.read(cx).focus_handle(cx);
+    view.update(cx, |this, cx| {
+        this.profile_dialog = Some(ProfileDialog::New {
+            name_input,
+            start: default_new_start(),
+            base: set.active.clone(),
+            rows,
+        });
+        cx.notify();
     });
-    let title = strings.get("gui-profile-new");
-    let empty = strings.get("gui-profile-empty");
-    let empty_note = strings.get("gui-profile-empty-note");
-    let copy = strings.get("gui-profile-copy");
-    let create = strings.get("gui-profile-create");
-    let cancel = strings.get("gui-action-cancel");
-    window.open_dialog(cx, move |dialog, _, cx| {
-        let chosen = pick.read(cx);
-        let base_name = rows
-            .iter()
-            .find(|(id, _)| id == &chosen.base)
-            .map(|(_, name)| name.clone())
-            .unwrap_or_default();
-        let mut args = FluentArgs::new();
-        args.set("base", base_name);
-        let copy_note = strings.get_args("gui-profile-copy-note", Some(&args));
-        let start = chosen.start;
-        let mut body = v_flex()
-            .gap_2()
-            .child(Input::new(&name_input).xsmall())
-            .child(choice_row(
-                "profile-new-empty",
-                &empty,
-                start == NewStart::Empty,
-                {
-                    let pick = pick.clone();
-                    let view = view.clone();
-                    move |cx| {
-                        pick.update(cx, |state, _| state.start = NewStart::Empty);
-                        view.update(cx, |_, cx| cx.notify());
-                    }
-                },
-                cx,
-            ));
-        if !start.shows_base() {
-            body = body.child(widgets::muted(empty_note.clone(), cx));
-        }
-        body = body.child(choice_row(
-            "profile-new-copy",
-            &copy,
-            start == NewStart::Copy,
-            {
-                let pick = pick.clone();
-                let view = view.clone();
-                move |cx| {
-                    pick.update(cx, |state, _| state.start = NewStart::Copy);
-                    view.update(cx, |_, cx| cx.notify());
-                }
-            },
-            cx,
-        ));
-        if start.shows_base() {
-            body = body.child(widgets::muted(copy_note, cx));
-            for (id, name) in &rows {
-                let id = id.clone();
-                let on = pick.read(cx).base == id;
-                body = body.child(choice_row(
-                    &format!("profile-base-{id}"),
-                    name,
-                    on,
-                    {
-                        let pick = pick.clone();
-                        let view = view.clone();
-                        let id = id.clone();
-                        move |cx| {
-                            pick.update(cx, |state, _| {
-                                state.start = NewStart::Copy;
-                                state.base = id.clone();
-                            });
-                            view.update(cx, |_, cx| cx.notify());
-                        }
-                    },
-                    cx,
-                ));
-            }
-        }
-        let name_input = name_input.clone();
-        let pick = pick.clone();
-        let view = view.clone();
-        dialog.title(title.clone()).child(
-            body.child(
-                h_flex()
-                    .gap_2()
-                    .child(action_btn(
-                        "profile-create",
-                        &create,
-                        true,
-                        {
-                            let view = view.clone();
-                            let name_input = name_input.clone();
-                            let pick = pick.clone();
-                            move |window, cx| {
-                                let name = name_input.read(cx).value().to_string();
-                                let start = pick.read(cx).start;
-                                let base = pick.read(cx).base.clone();
-                                window.close_dialog(cx);
-                                view.update(cx, |this, cx| {
-                                    this.create_and_use(name, start, base, cx)
-                                });
-                            }
-                        },
-                        cx,
-                    ))
-                    .child(action_btn(
-                        "profile-create-cancel",
-                        &cancel,
-                        false,
-                        move |window, cx| window.close_dialog(cx),
-                        cx,
-                    )),
-            ),
-        )
-    });
+    focus.focus(window, cx);
 }
 
 pub(crate) fn open_rename_profile(view: Entity<Shell>, window: &mut Window, cx: &mut App) {
+    if view.read(cx).profile_dialog.is_some() {
+        return;
+    }
     let Some(set) = view.read(cx).profiles.clone() else {
         return;
     };
     let Some(current) = set.active_profile() else {
         return;
     };
-    if current.kind == tuxgt_core::ProfileKind::Unmodded {
+    if current.kind == ProfileKind::Unmodded {
         return;
     }
     let old = current.name.clone();
-    let strings = view.read(cx).strings.clone();
     let input = cx.new(|cx| InputState::new(window, cx));
     input.update(cx, |inp, cx| inp.set_value(old.clone(), window, cx));
-    let title = strings.get("gui-profile-rename");
-    let save = strings.get("gui-action-save");
-    let cancel = strings.get("gui-action-cancel");
-    window.open_dialog(cx, move |dialog, _, cx| {
-        let input = input.clone();
-        let view = view.clone();
-        let old = old.clone();
-        dialog.title(title.clone()).child(
-            v_flex().gap_2().child(Input::new(&input).xsmall()).child(
-                h_flex()
-                    .gap_2()
-                    .child(action_btn(
-                        "profile-rename-save",
-                        &save,
-                        true,
-                        {
-                            let view = view.clone();
-                            let input = input.clone();
-                            let old = old.clone();
-                            move |window, cx| {
-                                let new_name = input.read(cx).value().to_string();
-                                let old = old.clone();
-                                window.close_dialog(cx);
-                                view.update(cx, |this, cx| this.rename_go(old, new_name, cx));
-                            }
-                        },
-                        cx,
-                    ))
-                    .child(action_btn(
-                        "profile-rename-cancel",
-                        &cancel,
-                        false,
-                        move |window, cx| window.close_dialog(cx),
-                        cx,
-                    )),
-            ),
-        )
+    let focus = input.read(cx).focus_handle(cx);
+    view.update(cx, |this, cx| {
+        this.profile_dialog = Some(ProfileDialog::Rename { old, input });
+        cx.notify();
     });
+    focus.focus(window, cx);
 }
 
 pub(crate) fn open_delete_profile(view: Entity<Shell>, window: &mut Window, cx: &mut App) {
+    if view.read(cx).profile_dialog.is_some() {
+        return;
+    }
     let Some(set) = view.read(cx).profiles.clone() else {
         return;
     };
     let Some(current) = set.active_profile() else {
         return;
     };
-    if current.kind != tuxgt_core::ProfileKind::User {
+    if current.kind != ProfileKind::User {
         return;
     }
     let name = current.name.clone();
-    let strings = view.read(cx).strings.clone();
-    let mut args = FluentArgs::new();
-    args.set("name", name.clone());
-    let ask = strings.get_args("gui-profile-delete-ask", Some(&args));
-    let delete = strings.get("gui-profile-delete");
-    let cancel = strings.get("gui-action-cancel");
-    window.open_dialog(cx, move |dialog, _, cx| {
-        let view = view.clone();
-        let name = name.clone();
-        dialog.title(ask.clone()).child(
-            h_flex()
-                .gap_2()
-                .child(action_btn(
-                    "profile-delete-yes",
-                    &delete,
-                    true,
-                    {
-                        let view = view.clone();
-                        let name = name.clone();
-                        move |window, cx| {
-                            let name = name.clone();
-                            window.close_dialog(cx);
-                            view.update(cx, |this, cx| {
-                                this.delete_go(name, false, false, false, cx)
-                            });
-                        }
-                    },
-                    cx,
-                ))
-                .child(action_btn(
-                    "profile-delete-no",
-                    &cancel,
-                    false,
-                    |window, cx| window.close_dialog(cx),
-                    cx,
-                )),
-        )
+    let focus = view.read(cx).focus.clone();
+    view.update(cx, |this, cx| {
+        this.profile_dialog = Some(ProfileDialog::Delete { name });
+        cx.notify();
     });
+    focus.focus(window, cx);
 }
 
-pub(crate) fn open_files(
-    view: Entity<Shell>,
-    strings: tuxgt_core::Strings,
-    window: &mut Window,
-    cx: &mut App,
-    dests: Vec<String>,
-    go: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
-) {
-    let go: std::rc::Rc<dyn Fn(&mut Shell, &mut Context<Shell>)> = std::rc::Rc::new(go);
-    let title = strings.get("gui-profile-files");
-    let confirm = strings.get("gui-action-confirm");
-    let cancel = strings.get("gui-action-cancel");
-    window.open_dialog(cx, move |dialog, _, cx| {
-        dialog.title(title.clone()).child(
-            v_flex()
-                .gap_2()
-                .children(dests.iter().map(|d| widgets::mono(d.clone(), cx)))
-                .child(confirm_row(view.clone(), &confirm, &cancel, go.clone(), cx)),
-        )
-    });
-}
+impl Shell {
+    /// File-changes confirm, parked from inside a Shell update (the
+    /// switch result handler), so it writes the state field directly
+    /// instead of going through the view.
+    pub(crate) fn open_files_dialog(
+        &mut self,
+        dests: Vec<String>,
+        go: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.can_park_profile_dialog(cx) {
+            return;
+        }
+        self.profile_dialog = Some(ProfileDialog::Files {
+            dests,
+            go: Rc::new(go),
+        });
+        self.focus.focus(window, cx);
+        cx.notify();
+    }
 
-pub(crate) fn open_restore(
-    view: Entity<Shell>,
-    strings: tuxgt_core::Strings,
-    window: &mut Window,
-    cx: &mut App,
-    go: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
-) {
-    let go: std::rc::Rc<dyn Fn(&mut Shell, &mut Context<Shell>)> = std::rc::Rc::new(go);
-    let title = strings.get("gui-profile-restore");
-    let confirm = strings.get("gui-action-confirm");
-    let cancel = strings.get("gui-action-cancel");
-    window.open_dialog(cx, move |dialog, _, cx| {
-        dialog.title(title.clone()).child(confirm_row(
-            view.clone(),
-            &confirm,
-            &cancel,
-            go.clone(),
-            cx,
-        ))
-    });
-}
+    /// Apply-restore confirm; same parking rule as `open_files_dialog`.
+    pub(crate) fn open_restore_dialog(
+        &mut self,
+        go: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.can_park_profile_dialog(cx) {
+            return;
+        }
+        self.profile_dialog = Some(ProfileDialog::Restore { go: Rc::new(go) });
+        self.focus.focus(window, cx);
+        cx.notify();
+    }
 
-fn choice_row(
-    id: &str,
-    label: &str,
-    on: bool,
-    pick: impl Fn(&mut App) + 'static,
-    cx: &App,
-) -> impl IntoElement {
-    let glyph = if on { "●" } else { "○" };
-    h_flex()
-        .id(SharedString::from(id.to_string()))
-        .gap_2()
-        .cursor_pointer()
-        .on_click(move |_, _, cx| pick(cx))
-        .child(widgets::mono(glyph, cx))
-        .child(widgets::blabel(label.to_string(), cx))
-}
+    /// Late async preview/switch results must not replace an open dialog
+    /// (typed New/Rename input, or a parked Files/Restore `go`).
+    fn can_park_profile_dialog(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.profile_dialog.is_some() {
+            self.status = self.strings.get("gui-status-resolve-confirm-first");
+            cx.notify();
+            return false;
+        }
+        true
+    }
 
-fn action_btn(
-    id: &'static str,
-    label: &str,
-    primary: bool,
-    go: impl Fn(&mut Window, &mut App) + 'static,
-    cx: &App,
-) -> impl IntoElement {
-    let btn = widgets::btn(id, cx).child(widgets::blabel(label.to_string(), cx));
-    let btn = if primary { btn.primary() } else { btn.ghost() };
-    btn.on_click(move |_, window, cx| go(window, cx))
-}
+    /// Drop the parked dialog and return it. Restores shell focus so root
+    /// Escape (sidecar) still works after an input-holding New/Rename closes.
+    fn take_profile_dialog(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<ProfileDialog> {
+        let dialog = self.profile_dialog.take()?;
+        self.focus.focus(window, cx);
+        cx.notify();
+        Some(dialog)
+    }
 
-fn confirm_row(
-    view: Entity<Shell>,
-    confirm: &str,
-    cancel: &str,
-    go: std::rc::Rc<dyn Fn(&mut Shell, &mut Context<Shell>)>,
-    cx: &App,
-) -> impl IntoElement {
-    let go_yes = go.clone();
-    h_flex()
-        .gap_2()
-        .child(action_btn(
-            "profile-files-yes",
-            confirm,
-            true,
-            {
-                let view = view.clone();
-                move |window, cx| {
-                    window.close_dialog(cx);
-                    let go_yes = go_yes.clone();
-                    view.update(cx, |this, cx| go_yes(this, cx));
-                }
-            },
-            cx,
-        ))
-        .child(action_btn(
-            "profile-files-no",
-            cancel,
-            false,
-            move |window, cx| window.close_dialog(cx),
-            cx,
-        ))
+    /// Cancel / click-outside / Escape: drop the parked dialog and the
+    /// action behind it. Nothing else is written.
+    pub(crate) fn close_profile_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let _ = self.take_profile_dialog(window, cx);
+    }
+
+    pub(crate) fn profile_new_set_start(&mut self, start: NewStart, cx: &mut Context<Self>) {
+        if let Some(ProfileDialog::New { start: cur, .. }) = &mut self.profile_dialog {
+            *cur = start;
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn profile_new_set_base(&mut self, base: String, cx: &mut Context<Self>) {
+        if let Some(ProfileDialog::New {
+            start, base: cur, ..
+        }) = &mut self.profile_dialog
+        {
+            *start = NewStart::Copy;
+            *cur = base;
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn profile_new_create(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(ProfileDialog::New {
+            name_input,
+            start,
+            base,
+            ..
+        }) = self.take_profile_dialog(window, cx)
+        else {
+            return;
+        };
+        let name = name_input.read(cx).value().to_string();
+        self.create_and_use(name, start, base, cx);
+    }
+
+    pub(crate) fn profile_rename_save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(ProfileDialog::Rename { old, input }) = self.take_profile_dialog(window, cx)
+        else {
+            return;
+        };
+        let new_name = input.read(cx).value().to_string();
+        self.rename_go(old, new_name, cx);
+    }
+
+    pub(crate) fn profile_delete_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(ProfileDialog::Delete { name }) = self.take_profile_dialog(window, cx) else {
+            return;
+        };
+        self.delete_go(name, false, false, false, cx);
+    }
+
+    pub(crate) fn profile_files_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(ProfileDialog::Files { go, .. }) = self.take_profile_dialog(window, cx) else {
+            return;
+        };
+        go(self, cx);
+    }
+
+    pub(crate) fn profile_restore_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(ProfileDialog::Restore { go }) = self.take_profile_dialog(window, cx) else {
+            return;
+        };
+        go(self, cx);
+    }
 }

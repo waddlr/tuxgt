@@ -61,7 +61,7 @@ The hero shows one display-only pill, `Profile: <name>`, in its own row under Pl
 
 The menu lists profile names, with the active one checked, then New profile…, Rename… (absent on Unmodded), and Delete (absent on Unmodded and Default). No Linked row. No History. No next-launch line. No play-once.
 
-File and restore confirms are dialogs. Add-to-Default is a card on the game page, not a dialog and not `ConfirmOp`. Cancel drops the card and the install and uninstall queues. A successful switch toasts “Using {name}.” and reloads mods, knobs, env, and the Apply arm. A deferred restore uses the existing client-stop card, then `restore_launch`. It does not unhook.
+The profile dialogs (New, Rename, Delete, file-changes, and Apply-restore confirms) are app-owned modals in the client-stop card's style: full-window dim, card centered on both axes, click-outside or Escape cancels. Add-to-Default is a card on the game page, not a dialog and not `ConfirmOp`. Cancel drops the card and the install and uninstall queues. A successful switch toasts “Using {name}.” and reloads mods, knobs, env, and the Apply arm. A deferred restore uses the existing client-stop card, then `restore_launch`. It does not unhook.
 
 ## CLI
 

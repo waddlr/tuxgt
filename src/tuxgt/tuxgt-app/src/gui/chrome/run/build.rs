@@ -186,6 +186,7 @@ pub(super) fn build_window(ctx: &Ctx, cx: &mut App) -> Option<LiveWindow> {
                 handle,
                 session_payload,
                 profiles: None,
+                profile_dialog: None,
                 profile_retry: None,
                 profile_restore_game: None,
                 profile_rearm_game: None,

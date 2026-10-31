@@ -196,6 +196,7 @@ impl Shell {
         self.override_edit = None;
         self.redetect_confirm = false;
         self.profiles = None;
+        self.profile_dialog = None;
         self.profile_retry = None;
     }
 }

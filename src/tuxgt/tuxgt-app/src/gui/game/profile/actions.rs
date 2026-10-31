@@ -4,8 +4,7 @@ use tuxgt_core::{
 };
 
 use super::super::super::{rt_block, ClientStopOp, Shell};
-use super::dialog::{open_files, open_restore};
-use super::{this_view, NewStart};
+use super::NewStart;
 
 impl Shell {
     pub(crate) fn create_and_use(
@@ -128,18 +127,27 @@ impl Shell {
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())
                         .collect();
-                    open_files(this_view(cx), this.strings.clone(), window, cx, dests, {
-                        let name = name.clone();
-                        move |this, cx| this.delete_go(name.clone(), true, false, false, cx)
-                    });
+                    this.open_files_dialog(
+                        dests,
+                        {
+                            let name = name.clone();
+                            move |this, cx| this.delete_go(name.clone(), true, false, false, cx)
+                        },
+                        window,
+                        cx,
+                    );
                 }
                 Err(tuxgt_core::Error::NeedConfirm(msg))
                     if msg.starts_with("profile-restore:") && !yes_restore =>
                 {
-                    open_restore(this_view(cx), this.strings.clone(), window, cx, {
-                        let name = name.clone();
-                        move |this, cx| this.delete_go(name.clone(), true, true, false, cx)
-                    });
+                    this.open_restore_dialog(
+                        {
+                            let name = name.clone();
+                            move |this, cx| this.delete_go(name.clone(), true, true, false, cx)
+                        },
+                        window,
+                        cx,
+                    );
                 }
                 Err(tuxgt_core::Error::NeedConfirm(msg))
                     if msg.starts_with("profile-client-stop:") && !yes_client_stop =>

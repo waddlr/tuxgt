@@ -1,11 +1,13 @@
 mod actions;
 mod dialog;
 mod gate;
+mod modal;
 mod rearm;
 mod section;
 mod start;
 mod stop;
 
+pub(crate) use dialog::ProfileDialog;
 pub(crate) use start::{default_new_start, NewStart, HERO_BODY};
 
 use gpui_kit::component::{h_flex, ActiveTheme as _};
@@ -74,11 +76,7 @@ impl Shell {
                     this.switch_go(game, target, name, true, true, false, cx);
                 }
                 Ok(preview) if !preview.file_changes.is_empty() => {
-                    dialog::open_files(
-                        this_view(cx),
-                        this.strings.clone(),
-                        window,
-                        cx,
+                    this.open_files_dialog(
                         preview.file_changes,
                         {
                             let game = game.clone();
@@ -96,25 +94,31 @@ impl Shell {
                                 )
                             }
                         },
+                        window,
+                        cx,
                     );
                 }
                 Ok(preview) if preview.drops_needs => {
-                    dialog::open_restore(this_view(cx), this.strings.clone(), window, cx, {
-                        let game = game.clone();
-                        let target = target.clone();
-                        let name = name.clone();
-                        move |this, cx| {
-                            this.switch_go(
-                                game.clone(),
-                                target.clone(),
-                                name.clone(),
-                                true,
-                                true,
-                                false,
-                                cx,
-                            )
-                        }
-                    });
+                    this.open_restore_dialog(
+                        {
+                            let game = game.clone();
+                            let target = target.clone();
+                            let name = name.clone();
+                            move |this, cx| {
+                                this.switch_go(
+                                    game.clone(),
+                                    target.clone(),
+                                    name.clone(),
+                                    true,
+                                    true,
+                                    false,
+                                    cx,
+                                )
+                            }
+                        },
+                        window,
+                        cx,
+                    );
                 }
                 Ok(_) => this.switch_go(game, target, name, true, true, false, cx),
                 Err(e) => {
@@ -177,43 +181,52 @@ impl Shell {
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())
                         .collect();
-                    dialog::open_files(this_view(cx), this.strings.clone(), window, cx, dests, {
-                        let game = game.clone();
-                        let target = target.clone();
-                        let name = name.clone();
-                        let yes_restore = yes_restore;
-                        move |this, cx| {
-                            this.switch_go(
-                                game.clone(),
-                                target.clone(),
-                                name.clone(),
-                                true,
-                                yes_restore,
-                                false,
-                                cx,
-                            )
-                        }
-                    });
+                    this.open_files_dialog(
+                        dests,
+                        {
+                            let game = game.clone();
+                            let target = target.clone();
+                            let name = name.clone();
+                            let yes_restore = yes_restore;
+                            move |this, cx| {
+                                this.switch_go(
+                                    game.clone(),
+                                    target.clone(),
+                                    name.clone(),
+                                    true,
+                                    yes_restore,
+                                    false,
+                                    cx,
+                                )
+                            }
+                        },
+                        window,
+                        cx,
+                    );
                 }
                 Err(tuxgt_core::Error::NeedConfirm(msg))
                     if msg.starts_with("profile-restore:") && !yes_restore =>
                 {
-                    dialog::open_restore(this_view(cx), this.strings.clone(), window, cx, {
-                        let game = game.clone();
-                        let target = target.clone();
-                        let name = name.clone();
-                        move |this, cx| {
-                            this.switch_go(
-                                game.clone(),
-                                target.clone(),
-                                name.clone(),
-                                true,
-                                true,
-                                false,
-                                cx,
-                            )
-                        }
-                    });
+                    this.open_restore_dialog(
+                        {
+                            let game = game.clone();
+                            let target = target.clone();
+                            let name = name.clone();
+                            move |this, cx| {
+                                this.switch_go(
+                                    game.clone(),
+                                    target.clone(),
+                                    name.clone(),
+                                    true,
+                                    true,
+                                    false,
+                                    cx,
+                                )
+                            }
+                        },
+                        window,
+                        cx,
+                    );
                 }
                 Err(tuxgt_core::Error::NeedConfirm(msg))
                     if msg.starts_with("profile-client-stop:") && !yes_client_stop =>
@@ -270,8 +283,4 @@ impl Shell {
         }
         cx.notify();
     }
-}
-
-fn this_view(cx: &Context<Shell>) -> Entity<Shell> {
-    cx.entity()
 }

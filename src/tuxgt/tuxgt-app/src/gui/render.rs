@@ -53,14 +53,16 @@ impl Render for Shell {
             .track_focus(&self.focus)
             .on_key_down({
                 let view = view.clone();
-                move |event: &KeyDownEvent, _, cx| {
+                move |event: &KeyDownEvent, window, cx| {
                     // E101: Escape closes the sidecar (a click outside and
                     // the bell do too).
                     if event.keystroke.key != "escape" {
                         return;
                     }
                     view.update(cx, |this, cx| {
-                        if this.sidecar_open {
+                        if this.profile_dialog.is_some() {
+                            this.close_profile_dialog(window, cx);
+                        } else if this.sidecar_open {
                             this.close_sidecar(cx);
                         }
                     });
@@ -125,6 +127,7 @@ impl Render for Shell {
             // layer is gone so nothing can paint a second, unexpirable one.
             .children(self.notice_layer(view.clone(), cx))
             .children(self.client_stop_layer(view.clone(), cx))
+            .children(self.profile_dialog_layer(view.clone(), cx))
             .children(self.config_discard_layer(view.clone(), cx))
             // `Root`'s own render paints no dialogs: `open_dialog` is invisible
             // until the app view renders this layer (E62 picker).

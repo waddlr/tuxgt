@@ -14,6 +14,7 @@ use super::sys::SysInfo;
 use super::tray::{AppCommand, HideState};
 use super::tray::{InstallGuard, RecentSnapshot};
 
+use super::game::profile::ProfileDialog;
 use super::notice_store::NoticeStore;
 use super::settings::{AppUpdate, AppUpdateLive};
 use super::*;
@@ -78,6 +79,7 @@ pub struct Shell {
     pub(crate) session_payload: HashMap<String, bool>,
     /// Selected game's profiles. `None` until `show_game` finishes loading.
     pub(crate) profiles: Option<tuxgt_core::ProfileSet>,
+    pub(crate) profile_dialog: Option<ProfileDialog>,
     pub(crate) profile_retry: Option<ProfileRetry>,
     /// Apply restore still owed after a profile switch. Survives a confirm
     /// card that was already up, until the client stop runs or the user
